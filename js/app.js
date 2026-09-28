@@ -48,7 +48,10 @@ let usuarioActual = null;
 
 // Se llama al cargar la página. Decide si mostrar el login o la app.
 function verificarSesion() {
-    fetch('api/sesion_actual.php')
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/sesion_actual.php', {
+        credentials: 'include',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
         .then(response => response.json())
         .then(data => {
             if (data.logueado) {
@@ -98,9 +101,13 @@ function enviarLogin(event) {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
 
-    fetch('api/login.php', {
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/login.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ email, password })
     })
         .then(response => response.json())
@@ -131,9 +138,13 @@ function enviarRegistro(event) {
     const email = document.getElementById('registro-email').value.trim();
     const password = document.getElementById('registro-password').value;
 
-    fetch('api/registro.php', {
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/registro.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ nombre, email, password })
     })
         .then(response => response.json())
@@ -156,7 +167,14 @@ function enviarRegistro(event) {
 }
 
 function cerrarSesion() {
-    fetch('api/logout.php', { method: 'POST' })
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/logout.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        }
+    })
         .then(() => {
             usuarioActual = null;
             nuevoProyecto(); // Limpia el formulario para que el siguiente usuario no vea datos ajenos
@@ -1272,9 +1290,13 @@ function guardarProyecto() {
     console.log("Datos que se enviarán al servidor:", datosDelProyecto);
 
     // PARTE 3: Envía todo al backend
-    fetch('api/guardar_proyecto.php', {
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/guardar_proyecto.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify(datosDelProyecto)
     })
         .then(response => {
@@ -1309,7 +1331,10 @@ function guardarProyecto() {
 }
 
 function cargarListaDeProyectos() {
-    fetch('api/cargar_proyectos.php')
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/cargar_proyectos.php', {
+        credentials: 'include',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
         .then(response => {
             if (manejarSesionExpirada(response)) {
                 return Promise.reject(new Error('Sesión no iniciada'));
@@ -1350,7 +1375,10 @@ function cargarListaDeProyectos() {
 
 function cargarProyecto(id) {
     console.log(`Cargando datos para el proyecto con ID: ${id}`);
-    fetch(`api/obtener_proyecto.php?id=${id}`)
+    fetch(`https://de90-187-188-63-54.ngrok-free.app/api/obtener_proyecto.php?id=${id}`, {
+        credentials: 'include',
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
         .then(response => {
             if (manejarSesionExpirada(response)) {
                 return Promise.reject(new Error('Sesión no iniciada'));
@@ -1512,13 +1540,14 @@ async function borrarProyecto(id) {
     }
 
     // 2. Llamada a la API
-    // Usamos FormData para enviar el ID como si fuera un formulario
-    const formData = new FormData();
-    formData.append('id', id);
-
-    fetch('api/borrar_proyecto.php', {
+    fetch('https://de90-187-188-63-54.ngrok-free.app/api/borrar_proyecto.php', {
         method: 'POST',
-        body: formData
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ id })
     })
         .then(response => {
             if (manejarSesionExpirada(response)) {
