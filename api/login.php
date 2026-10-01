@@ -21,9 +21,9 @@ if (session_status() === PHP_SESSION_NONE) {
         'lifetime' => 86400,
         'path'     => '/',
         'domain'   => '',
-        'secure'   => true,
+        'secure'   => false, // mismo origen (Apache sirve API + frontend); cambiar a true si se agrega HTTPS
         'httponly' => true,
-        'samesite' => 'None'
+        'samesite' => 'Lax'
     ]);
     session_start();
 }
@@ -41,7 +41,7 @@ if ($email === '' || $password === '') {
 }
 
 try {
-    $stmt = $pdo->prepare("SELECT id_usuario, nombre, email, password_hash FROM usuarios WHERE email = :email");
+    $stmt = $pdo->prepare("SELECT id_usuario, nombre, email, password_hash, rol FROM usuarios WHERE email = :email");
     $stmt->execute([':email' => $email]);
     $usuario = $stmt->fetch();
 
@@ -56,6 +56,7 @@ try {
     $_SESSION['id_usuario'] = $usuario['id_usuario'];
     $_SESSION['nombre']     = $usuario['nombre'];
     $_SESSION['email']      = $usuario['email'];
+    $_SESSION['rol']        = $usuario['rol'];
 
     echo json_encode([
         'status'  => 'success',
@@ -63,6 +64,7 @@ try {
             'id_usuario' => $usuario['id_usuario'],
             'nombre'     => $usuario['nombre'],
             'email'      => $usuario['email'],
+            'rol'        => $usuario['rol'],
         ],
     ]);
 

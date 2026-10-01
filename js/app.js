@@ -48,7 +48,7 @@ let usuarioActual = null;
 
 // Se llama al cargar la página. Decide si mostrar el login o la app.
 function verificarSesion() {
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/sesion_actual.php', {
+    fetch('/api/sesion_actual.php', {
         credentials: 'include',
         headers: { 'ngrok-skip-browser-warning': 'true' }
     })
@@ -101,7 +101,7 @@ function enviarLogin(event) {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
 
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/login.php', {
+    fetch('/api/login.php', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -138,7 +138,7 @@ function enviarRegistro(event) {
     const email = document.getElementById('registro-email').value.trim();
     const password = document.getElementById('registro-password').value;
 
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/registro.php', {
+    fetch('/api/registro.php', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -167,7 +167,7 @@ function enviarRegistro(event) {
 }
 
 function cerrarSesion() {
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/logout.php', {
+    fetch('/api/logout.php', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1290,7 +1290,7 @@ function guardarProyecto() {
     console.log("Datos que se enviarán al servidor:", datosDelProyecto);
 
     // PARTE 3: Envía todo al backend
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/guardar_proyecto.php', {
+    fetch('/api/guardar_proyecto.php', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1331,7 +1331,7 @@ function guardarProyecto() {
 }
 
 function cargarListaDeProyectos() {
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/cargar_proyectos.php', {
+    fetch('/api/cargar_proyectos.php', {
         credentials: 'include',
         headers: { 'ngrok-skip-browser-warning': 'true' }
     })
@@ -1375,7 +1375,7 @@ function cargarListaDeProyectos() {
 
 function cargarProyecto(id) {
     console.log(`Cargando datos para el proyecto con ID: ${id}`);
-    fetch(`https://de90-187-188-63-54.ngrok-free.app/api/obtener_proyecto.php?id=${id}`, {
+    fetch(`/api/obtener_proyecto.php?id=${id}`, {
         credentials: 'include',
         headers: { 'ngrok-skip-browser-warning': 'true' }
     })
@@ -1540,7 +1540,7 @@ async function borrarProyecto(id) {
     }
 
     // 2. Llamada a la API
-    fetch('https://de90-187-188-63-54.ngrok-free.app/api/borrar_proyecto.php', {
+    fetch('/api/borrar_proyecto.php', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1618,7 +1618,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function iniciarSocket() {
     if (conn) conn.close();
-    conn = new WebSocket('ws://localhost:8081');//aqui llama al socket
+    // Antes: 'ws://localhost:8081' fijo, que solo funciona si front y back
+    // corren en la misma máquina. Ahora se arma con el host real donde esté
+    // cargada la página (funciona igual en localhost, en la IP de Oracle,
+    // o detrás de un dominio si más adelante se agrega HTTPS/wss).
+    // Puerto 8083: es el puerto del HOST mapeado en docker-compose.yml hacia
+    // el 8081 interno del contenedor (remapeado para convivir con el otro
+    // proyecto en la misma instancia de Oracle).
+    const wsProtocolo = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    conn = new WebSocket(wsProtocolo + location.hostname + ':8083');
 
     conn.onopen = function (e) {
         console.log("✅ Conexión establecida con el Socket!");

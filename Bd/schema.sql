@@ -154,6 +154,9 @@ CREATE TABLE `usuarios` (
   `nombre` VARCHAR(150) NOT NULL,
   `email` VARCHAR(190) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
+  -- NUEVO: modelo de roles pedido por el profesor. 'gratuito' por defecto
+  -- para que el registro normal no tenga que tocarse.
+  `rol` ENUM('gratuito','de_pago','administrador') NOT NULL DEFAULT 'gratuito',
   `fecha_creacion` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id_usuario`),
   UNIQUE KEY `uq_usuarios_email` (`email`)

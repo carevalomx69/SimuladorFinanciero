@@ -21,9 +21,9 @@ if (session_status() === PHP_SESSION_NONE) {
         'lifetime' => 86400,
         'path'     => '/',
         'domain'   => '',
-        'secure'   => true,
+        'secure'   => false, // mismo origen (Apache sirve API + frontend); cambiar a true si se agrega HTTPS
         'httponly' => true,
-        'samesite' => 'None'
+        'samesite' => 'Lax'
     ]);
     session_start();
 }
@@ -68,15 +68,19 @@ try {
     $id_usuario = (int) $pdo->lastInsertId();
 
     // Iniciamos sesión automáticamente tras registrarse
+    // (rol: siempre 'gratuito' vía el DEFAULT de la columna; para dar de alta
+    // un usuario de pago o administrador se cambia luego a mano o desde un
+    // panel de administración, nunca a elección del propio registro público)
     session_regenerate_id(true);
     $_SESSION['id_usuario'] = $id_usuario;
     $_SESSION['nombre']     = $nombre;
     $_SESSION['email']      = $email;
+    $_SESSION['rol']        = 'gratuito';
 
     echo json_encode([
         'status'  => 'success',
         'message' => 'Cuenta creada correctamente',
-        'usuario' => ['id_usuario' => $id_usuario, 'nombre' => $nombre, 'email' => $email],
+        'usuario' => ['id_usuario' => $id_usuario, 'nombre' => $nombre, 'email' => $email, 'rol' => 'gratuito'],
     ]);
 
 } catch (PDOException $e) {

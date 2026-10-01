@@ -22,9 +22,9 @@ if (session_status() === PHP_SESSION_NONE) {
         'lifetime' => 86400,
         'path'     => '/',
         'domain'   => '',
-        'secure'   => true,
+        'secure'   => false, // mismo origen (Apache sirve API + frontend); cambiar a true si se agrega HTTPS
         'httponly' => true,
-        'samesite' => 'None'
+        'samesite' => 'Lax'
     ]);
     session_start();
 }

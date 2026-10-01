@@ -7,8 +7,10 @@ services:
     container_name: apache_calculadora
     restart: unless-stopped
     ports:
-      - "8080:80"
-      - "8081:8081"
+      # Remapeados: la instancia Oracle ya tiene el 80 (Nginx de Estructuras_de_datos_UAA)
+      # y el 8080 (Adminer) ocupados por el otro proyecto. Puerto host : puerto contenedor.
+      - "8082:80"
+      - "8083:8081"
     volumes:
       # Sincronización de carpetas de código (para desarrollo en vivo)
       - ./api:/var/www/html/api
@@ -34,7 +36,11 @@ services:
       MYSQL_USER: usuario_finanzas
       MYSQL_PASSWORD: admin1234
     ports:
-      - "3306:3306"
+      # Remapeado: el 3306 del host ya lo usa la base del otro proyecto en
+      # esta misma instancia. La app se conecta por red interna de Docker
+      # (host "db" dentro del compose), así que esto solo es para poder
+      # inspeccionar la base desde afuera con un cliente MySQL o Adminer.
+      - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       # Todo .sql en esta carpeta se ejecuta automáticamente la PRIMERA VEZ
