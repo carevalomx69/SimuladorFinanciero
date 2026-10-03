@@ -73,9 +73,10 @@ La documentación completa de arquitectura, diagramas UML, justificación de pat
 
 ---
 **Desarrollado por:** Equipo: 
-- Cesar Eduardo Juarez Jasso 
 - Jose Emilio Ortega Delgado
+- Cesar Eduardo Juarez Jasso 
 - Jimena Diaz Esquivel
 - Karlo Antonio Ordaz De Vierna
-- Asesor: Carlos Arévalo Mercado
-- Asesor experto Finanzas: Dra. Lety Martell
+- Asesor Técnico: Dr. Carlos Argelio Arévalo Mercado
+- Asesor experto Finanzas: Dra. Gloria Leticia Martell Campos
+- Asesor planeación: Dra. Lizeth Itziguery Solano Romo
