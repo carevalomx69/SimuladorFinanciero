@@ -77,5 +77,5 @@ La documentación completa de arquitectura, diagramas UML, justificación de pat
 - Jose Emilio Ortega Delgado
 - Jimena Diaz Esquivel
 - Karlo Antonio Ordaz De Vierna
-- Obed Esau Campos Cruhchy
-- Diseño de Software 2025.
+- Asesor: Carlos Arévalo Mercado
+- Asesor experto Finanzas: Dra. Lety Martell
