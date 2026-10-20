@@ -31,6 +31,8 @@ let globalData = {
     capital: [0, 0, 0, 0, 0]
 };
 
+const API_URL = ''; // mismo servidor que sirve la página
+
 // Variables para el Socket, Moneda y Conversión
 let conn;
 let monedaActual = 'MXN';
@@ -262,7 +264,7 @@ function mostrarConfirmacion(mensaje) {
 // le pone un check al botón correspondiente en el sidebar.
 function verificarCompletitudSecciones() {
     document.querySelectorAll('.tab-content').forEach(tab => {
-        const campos = tab.querySelectorAll('input[type="number"], input[type="text"]:not([readonly])');
+        const campos = tab.querySelectorAll('input[type="number"]:not([readonly]):not([data-opcional]), input[type="text"]:not([readonly]):not([data-opcional])');
         if (campos.length === 0) return; // secciones que son solo resultados, sin nada que llenar
 
         let completo = true;
@@ -332,113 +334,884 @@ function seleccionarMoneda(moneda, cultura) {
 }
 
 // ===========================
-// 3. LÓGICA DE CÁLCULOS (PESTAÑAS)
+// 3. LÓGICA DE CÁLCULOS (MOTOR FINANCIERO)
 // ===========================
+// Todo se recalcula en orden con recalcularTodo(). Las funciones viejas
+// (calcularPlan, calcularPptoVtas, etc.) siguen existiendo porque el HTML
+// las llama en los onchange, pero ahora todas llaman a recalcularTodo()
+// para que ninguna pestaña se quede con datos viejos.
 
-// PESTAÑA 1: MERCADO META
-function calcularPlan() {
-    const poblacionTotal = parseFloat(document.getElementById('poblacion-total').value) || 0;
-    const porcentajeMujeres = parseFloat(document.getElementById('porcentaje-mujeres').value) || 0;
-    const rangoEdad = parseFloat(document.getElementById('rango-edad').value) || 0;
-    const poblacionOcupada = parseFloat(document.getElementById('poblacion-ocupada').value) || 0;
-    const concentracion = parseFloat(document.getElementById('concentracion-mercado').value) || 0;
+const ANIOS = [0, 1, 2, 3, 4];
 
-    const mercadoMeta = poblacionTotal * (porcentajeMujeres / 100) * (rangoEdad / 100) * (poblacionOcupada / 100);
-    const mercadoConcentrado = mercadoMeta * (concentracion / 100);
-
-    globalData.mercadoMeta = mercadoMeta;
-    globalData.porcentajeConcentracion = concentracion;
-
-    document.getElementById('mercado-meta').textContent = Math.round(mercadoMeta).toLocaleString('es-MX');
-    document.getElementById('mercado-concentrado').textContent = Math.round(mercadoConcentrado).toLocaleString('es-MX');
+// Lee un número de un input. Si está vacío regresa "porDefecto".
+function num(id, porDefecto = 0) {
+    const el = document.getElementById(id);
+    if (!el || el.value === '' || el.value === null) return porDefecto;
+    const v = parseFloat(el.value);
+    return isNaN(v) ? porDefecto : v;
 }
 
-// PESTAÑA 2: PROYECCIÓN DE VENTAS
-function calcularFactSensibil() {
-    const participacionMercado = parseFloat(document.getElementById('participacion-mercado').value) || 0;
-    const incrementoPoblacion = parseFloat(document.getElementById('incremento-poblacion').value) || 0;
-    const incrementoProducto = parseFloat(document.getElementById('incremento-producto').value) || 0;
-    const penetracionInicial = parseFloat(document.getElementById('penetracion-inicial').value) || 0;
-    const incrementoPenetracion = parseFloat(document.getElementById('incremento-penetracion').value) || 0;
+// Redondeo hacia arriba como ROUNDUP(x,0) de Excel (tolera errores de punto flotante)
+function redondearArriba(x) {
+    return Math.ceil(x - 1e-7);
+}
 
-    const mercadoBase = globalData.mercadoMeta;
+function fmtMoneda(v) {
+    return (v || 0).toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
+}
+function fmtNum(v, dec = 0) {
+    return (v || 0).toLocaleString('es-MX', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtPct(v, dec = 2) {
+    return isFinite(v) ? (v * 100).toFixed(dec) + '%' : 'N/A';
+}
+function fmtVeces(v, dec = 2) {
+    return isFinite(v) ? v.toFixed(dec) : 'N/A';
+}
 
-    if (mercadoBase === 0 && (participacionMercado > 0 || penetracionInicial > 0)) {
-        document.getElementById('proyeccion-mercado').innerHTML = '<p class="text-ink-400 italic">Completa la sección de Mercado Meta para ver la proyección aquí.</p>';
+// Arma una tabla de 5 años. filas = [{ label, data, fmt, clase, negrita }]
+function tablaAnual(filas, conAnioCero = false) {
+    let html = '<div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="table-header"><tr><th class="px-3 py-2 text-left">Concepto</th>';
+    if (conAnioCero) html += '<th class="px-3 py-2">Año 0</th>';
+    for (let a = 1; a <= 5; a++) html += `<th class="px-3 py-2">Año ${a}</th>`;
+    html += '</tr></thead><tbody>';
+    filas.forEach(f => {
+        if (f.seccion) {
+            html += `<tr class="${f.clase || 'bg-gray-100'}"><td colspan="${conAnioCero ? 7 : 6}" class="px-3 py-2 font-bold">${f.seccion}</td></tr>`;
+            return;
+        }
+        const formato = f.fmt || fmtMoneda;
+        html += `<tr class="table-row ${f.clase || ''}"><td class="px-3 py-2 ${f.negrita ? 'font-bold' : ''}">${f.label}</td>`;
+        f.data.forEach(v => {
+            const txt = (v === null || v === undefined) ? '' : formato(v);
+            const color = (typeof v === 'number' && v < 0) ? 'text-red-700' : '';
+            html += `<td class="px-3 py-2 text-right whitespace-nowrap ${f.negrita ? 'font-bold' : ''} ${color}">${txt}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function setHTML(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+}
+
+let _recalculando = false;
+
+function recalcularTodo() {
+    if (_recalculando) return;
+    _recalculando = true;
+    try {
+        const G = globalData;
+
+        // ---------- 1. MERCADO META ----------
+        // Si un % se deja vacío se toma como 100% (así puedes capturar el mercado meta directo en "Población Total")
+        const poblacion = num('poblacion-total');
+        G.mercadoMeta = poblacion * num('porcentaje-mujeres', 100) / 100 * num('rango-edad', 100) / 100 * num('poblacion-ocupada', 100) / 100;
+        G.porcentajeConcentracion = num('concentracion-mercado', 100);
+        G.mercadoConcentrado = G.mercadoMeta * G.porcentajeConcentracion / 100;
+        setHTML('mercado-meta', fmtNum(Math.round(G.mercadoMeta)));
+        setHTML('mercado-concentrado', fmtNum(Math.round(G.mercadoConcentrado)));
+
+        // ---------- 2. PROYECCIÓN DE MERCADO Y UNIDADES ----------
+        const participacion = num('participacion-mercado', 100);
+        const incPoblacion = num('incremento-poblacion');
+        const incProducto = num('incremento-producto');
+        const penetracionIni = num('penetracion-inicial', 100);
+        const incPenetracion = num('incremento-penetracion');
+        const usosMensuales = num('usos-mensuales');
+
+        G.mercadoPotencial = [];
+        G.penetracionMercado = [];
+        G.clientes = [];
+        ANIOS.forEach(a => {
+            if (a === 0) {
+                G.mercadoPotencial[a] = redondearArriba(G.mercadoConcentrado * participacion / 100);
+                G.penetracionMercado[a] = penetracionIni;
+            } else {
+                G.mercadoPotencial[a] = redondearArriba(G.mercadoPotencial[a - 1] * (1 + incPoblacion / 100) * (1 + incProducto / 100));
+                // Crecimiento porcentual (igual que el Excel: 15% x 1.04 = 15.6%)
+                G.penetracionMercado[a] = G.penetracionMercado[a - 1] * (1 + incPenetracion / 100);
+            }
+            G.clientes[a] = G.mercadoPotencial[a] * G.penetracionMercado[a] / 100;
+            // Si hay usos mensuales, las unidades a vender se calculan solas
+            if (usosMensuales > 0) {
+                const unidades = redondearArriba(G.clientes[a] * usosMensuales * 12);
+                const input = document.getElementById(`unidades-${a + 1}`);
+                if (input) input.value = unidades;
+            }
+        });
+        if (G.mercadoConcentrado > 0) {
+            setHTML('proyeccion-mercado', tablaAnual([
+                { label: 'Mercado potencial', data: G.mercadoPotencial, fmt: v => fmtNum(v) },
+                { label: '% Participación', data: G.penetracionMercado, fmt: v => v.toFixed(2) + '%' },
+                { label: 'Clientes', data: G.clientes, fmt: v => fmtNum(v) },
+                ...(usosMensuales > 0 ? [{ label: 'Unidades (× usos × 12)', data: G.clientes.map(c => redondearArriba(c * usosMensuales * 12)), fmt: v => fmtNum(v), negrita: true }] : [])
+            ]));
+        } else {
+            setHTML('proyeccion-mercado', '<p class="text-ink-400 italic">Completa la sección de Mercado Meta para ver la proyección aquí.</p>');
+        }
+
+        // ---------- 3. PRESUPUESTO DE VENTAS ----------
+        const precioBase = num('precio-unitario-base');
+        const incPrecio = num('incremento-precio');
+        const redondearPrecio = document.getElementById('redondear-precio')?.checked || false;
+        G.precioUnitario = [];
+        G.unidadesVenta = [];
+        G.ventasProyeccion = [];
+        G.costoMercancia = [0, 0, 0, 0, 0];
+
+        // Modo comercializadora: varios productos que se compran y se revenden
+        // (unidades crecen con "Incremento anual en unidades" de la pestaña 2,
+        //  precios con el incremento de precio y costos con el incremento del costo de MP)
+        const incCostoProd = num('inflacion-mp');
+        G.productos = [];
+        document.querySelectorAll('#productos-container .producto-item').forEach(fila => {
+            const nombre = fila.querySelector('.prod-nombre').value.trim();
+            const u0 = parseFloat(fila.querySelector('.prod-unidades').value) || 0;
+            const p0 = parseFloat(fila.querySelector('.prod-precio').value) || 0;
+            const c0 = parseFloat(fila.querySelector('.prod-costo').value) || 0;
+            if (!nombre || u0 <= 0) return;
+            const prod = { nombre, unidades: [], precio: [], costo: [], ventas: [], costoTotal: [] };
+            ANIOS.forEach(a => {
+                prod.unidades[a] = a === 0 ? u0 : redondearArriba(prod.unidades[a - 1] * (1 + incProducto / 100));
+                let pr = a === 0 ? p0 : prod.precio[a - 1] * (1 + incPrecio / 100);
+                if (a > 0 && redondearPrecio) pr = redondearArriba(pr);
+                prod.precio[a] = pr;
+                prod.costo[a] = c0 * Math.pow(1 + incCostoProd / 100, a);
+                prod.ventas[a] = prod.unidades[a] * pr;
+                prod.costoTotal[a] = prod.unidades[a] * prod.costo[a];
+            });
+            G.productos.push(prod);
+        });
+
+        if (G.productos.length > 0) {
+            ANIOS.forEach(a => {
+                G.unidadesVenta[a] = G.productos.reduce((s, p) => s + p.unidades[a], 0);
+                G.ventasProyeccion[a] = G.productos.reduce((s, p) => s + p.ventas[a], 0);
+                G.costoMercancia[a] = G.productos.reduce((s, p) => s + p.costoTotal[a], 0);
+                G.precioUnitario[a] = G.unidadesVenta[a] > 0 ? G.ventasProyeccion[a] / G.unidadesVenta[a] : 0;
+                const input = document.getElementById(`unidades-${a + 1}`);
+                if (input) input.value = G.unidadesVenta[a];
+            });
+            let htmlProd = '';
+            G.productos.forEach(p => {
+                htmlProd += `<div class="font-semibold text-gray-700 mt-3">${p.nombre}</div>` + tablaAnual([
+                    { label: 'Unidades', data: p.unidades, fmt: v => fmtNum(v) },
+                    { label: 'Precio', data: p.precio },
+                    { label: 'Ventas', data: p.ventas },
+                    { label: 'Costo de venta', data: p.costoTotal }
+                ]);
+            });
+            setHTML('ventas-proyeccion', tablaAnual([
+                { label: 'Unidades (todos)', data: G.unidadesVenta, fmt: v => fmtNum(v) },
+                { label: 'Ventas totales', data: G.ventasProyeccion, negrita: true },
+                { label: 'Costo de la mercancía', data: G.costoMercancia, negrita: true }
+            ]) + htmlProd);
+        } else {
+            ANIOS.forEach(a => {
+                let precio = a === 0 ? precioBase : G.precioUnitario[a - 1] * (1 + incPrecio / 100);
+                if (a > 0 && redondearPrecio) precio = redondearArriba(precio);
+                G.precioUnitario[a] = precio;
+                G.unidadesVenta[a] = num(`unidades-${a + 1}`);
+                G.ventasProyeccion[a] = G.unidadesVenta[a] * precio;
+            });
+            setHTML('ventas-proyeccion', tablaAnual([
+                { label: 'Unidades', data: G.unidadesVenta, fmt: v => fmtNum(v) },
+                { label: 'Precio', data: G.precioUnitario },
+                { label: 'Ventas', data: G.ventasProyeccion, negrita: true }
+            ]));
+        }
+
+        // ---------- 4. PRESUPUESTO DE PRODUCCIÓN ----------
+        const diasLaborables = num('dias-laborables', 260);
+        const diasInventario = num('dias-inventario');
+        const invInicialPTUnid = num('inv-inicial-prod');
+        G.invFinalPTUnid = [];
+        G.invInicialPTUnid = [];
+        G.unidadesProduccion = [];
+        ANIOS.forEach(a => {
+            if (diasInventario > 0) {
+                // Igual que el Excel: ventas / días laborables × días de inventario
+                const invAuto = redondearArriba(G.unidadesVenta[a] / diasLaborables * diasInventario);
+                const input = document.getElementById(`inv-final-${a + 1}`);
+                if (input) input.value = invAuto;
+            }
+            G.invFinalPTUnid[a] = num(`inv-final-${a + 1}`);
+            G.invInicialPTUnid[a] = a === 0 ? invInicialPTUnid : G.invFinalPTUnid[a - 1];
+            G.unidadesProduccion[a] = Math.max(0, G.unidadesVenta[a] + G.invFinalPTUnid[a] - G.invInicialPTUnid[a]);
+        });
+        setHTML('produccion-proyeccion', tablaAnual([
+            { label: 'Ventas (u)', data: G.unidadesVenta, fmt: v => fmtNum(v) },
+            { label: '(+) Inv. final deseado', data: G.invFinalPTUnid, fmt: v => fmtNum(v) },
+            { label: '(−) Inv. inicial', data: G.invInicialPTUnid, fmt: v => fmtNum(v) },
+            { label: '(=) Producción requerida', data: G.unidadesProduccion, fmt: v => fmtNum(v), negrita: true }
+        ]));
+
+        // ---------- 5. MATERIA PRIMA (receta y consumo) ----------
+        G.materiaPrima = [];
+        document.querySelectorAll('#receta-container .mp-item').forEach(fila => {
+            const nombre = fila.querySelector('.receta-mp').value.trim();
+            const cantidad = parseFloat(fila.querySelector('.receta-cant').value) || 0;
+            const unidad = fila.querySelector('.receta-unidad').value.trim() || 'unidad';
+            if (nombre && cantidad > 0) {
+                G.materiaPrima.push({
+                    nombre, cantidadPorUnidad: cantidad, unidad,
+                    consumoAnual: G.unidadesProduccion.map(p => p * cantidad)
+                });
+            }
+        });
+        let htmlConsumo = '';
+        G.materiaPrima.forEach(mp => {
+            htmlConsumo += `<div class="border-b pb-3 mb-2"><div class="font-semibold text-gray-700 mb-1">${mp.nombre}</div>`;
+            mp.consumoAnual.forEach((c, a) => {
+                htmlConsumo += `<div class="text-sm text-gray-600">Año ${a + 1}: ${fmtNum(c, 3)} ${mp.unidad}</div>`;
+            });
+            htmlConsumo += '</div>';
+        });
+        setHTML('consumo-mp', htmlConsumo || '<p class="text-sm text-gray-600">Agrega materias primas a la receta.</p>');
+
+        // ---------- 6. COMPRAS DE MP (con inflación del costo) ----------
+        sincronizarInputsCostoMP();
+        const inflacionMP = num('inflacion-mp');
+        const pctInvFinalMP = num('inv-final-mp-pct');
+        const invInicialMPUnid = num('inv-inicial-mp');
+        G.costoMP = [];
+        document.querySelectorAll('#costos-mp-container .costo-mp').forEach((input, i) => {
+            G.costoMP[i] = parseFloat(input.value) || 0;
+        });
+        G.comprasMP = [0, 0, 0, 0, 0];
+        G.invInicialMP = [0, 0, 0, 0, 0];
+        G.invFinalMP = [0, 0, 0, 0, 0];
+        G.mpUtilizada = [0, 0, 0, 0, 0];
+        let htmlCompras = '';
+        let htmlValMP = '';
+        G.materiaPrima.forEach((mp, i) => {
+            const costoBase = G.costoMP[i] || 0;
+            mp.costoAnual = [];
+            mp.comprasUnid = [];
+            mp.invFinalUnid = [];
+            mp.comprasValor = [];
+            mp.invFinalValor = [];
+            let invFinalAnteriorUnid = invInicialMPUnid;
+            let invFinalAnteriorValor = null;
+            ANIOS.forEach(a => {
+                const costo = costoBase * Math.pow(1 + inflacionMP / 100, a);
+                const consumo = mp.consumoAnual[a];
+                const invFinalUnid = consumo * pctInvFinalMP / 100;
+                const invInicialUnid = invFinalAnteriorUnid;
+                const comprasUnid = Math.max(0, consumo + invFinalUnid - invInicialUnid);
+                const invInicialValor = a === 0 ? invInicialUnid * costo : invFinalAnteriorValor;
+                const comprasValor = comprasUnid * costo;
+                const invFinalValor = invFinalUnid * costo;
+
+                mp.costoAnual[a] = costo;
+                mp.comprasUnid[a] = comprasUnid;
+                mp.invFinalUnid[a] = invFinalUnid;
+                mp.comprasValor[a] = comprasValor;
+                mp.invFinalValor[a] = invFinalValor;
+
+                G.comprasMP[a] += comprasValor;
+                G.invInicialMP[a] += invInicialValor;
+                G.invFinalMP[a] += invFinalValor;
+                G.mpUtilizada[a] += invInicialValor + comprasValor - invFinalValor;
+
+                invFinalAnteriorUnid = invFinalUnid;
+                invFinalAnteriorValor = invFinalValor;
+            });
+            htmlCompras += `<div class="font-semibold text-gray-700 mt-3">${mp.nombre}</div>` + tablaAnual([
+                { label: `Compras (${mp.unidad})`, data: mp.comprasUnid, fmt: v => fmtNum(v, 2) },
+                { label: 'Costo unitario', data: mp.costoAnual, fmt: v => fmtNum(v, 4) },
+                { label: 'Costo total', data: mp.comprasValor }
+            ]);
+            htmlValMP += `<div class="font-semibold text-gray-700 mt-3">${mp.nombre}</div>` + tablaAnual([
+                { label: `Inv. final (${mp.unidad})`, data: mp.invFinalUnid, fmt: v => fmtNum(v, 2) },
+                { label: 'Valor', data: mp.invFinalValor }
+            ]);
+        });
+        if (G.productos.length > 0) {
+            // La mercancía para reventa se compra y se vende en el mismo año (sin inventario)
+            ANIOS.forEach(a => {
+                G.comprasMP[a] += G.costoMercancia[a];
+                G.mpUtilizada[a] += G.costoMercancia[a];
+            });
+            htmlCompras += '<div class="font-semibold text-gray-700 mt-3">Mercancía para reventa (pestaña 3)</div>' +
+                tablaAnual([{ label: 'Costo total', data: G.costoMercancia }]);
+        }
+        htmlCompras += '<div class="font-bold text-indigo-600 mt-4">Total de compras</div>' + tablaAnual([
+            { label: 'Total compras', data: G.comprasMP, negrita: true }
+        ]);
+        setHTML('compras-mp-resultado', (G.materiaPrima.length || G.productos.length) ? htmlCompras : '<p>Configure costos y consumo de MP</p>');
+
+        // ---------- 7. MANO DE OBRA DIRECTA ----------
+        const tiempo = num('tiempo-unidad');
+        const tipoTiempo = document.getElementById('tiempo-unidad-tipo')?.value || 'hr';
+        const horasPorUnidad = tipoTiempo === 'min' ? tiempo / 60 : tiempo;
+        const costoHora = num('costo-hora');
+        const incSalarial = num('incremento-salarial');
+        const horasJornada = num('horas-jornada');
+        G.horasMO = [];
+        G.trabajadores = [];
+        G.costoHoraAnual = [];
+        G.costoMO = [];
+        ANIOS.forEach(a => {
+            const horas = G.unidadesProduccion[a] * horasPorUnidad;
+            const tarifa = costoHora * Math.pow(1 + incSalarial / 100, a);
+            G.horasMO[a] = horas;
+            G.costoHoraAnual[a] = tarifa;
+            if (horasJornada > 0 && diasLaborables > 0) {
+                // Igual que el Excel: trabajadores = ROUNDUP(horas/días/jornada); MOD = trabajadores × salario diario × días
+                const trabajadores = redondearArriba(horas / diasLaborables / horasJornada);
+                G.trabajadores[a] = trabajadores;
+                G.costoMO[a] = trabajadores * horasJornada * tarifa * diasLaborables;
+            } else {
+                G.trabajadores[a] = null;
+                G.costoMO[a] = horas * tarifa;
+            }
+        });
+        setHTML('costo-mo', tablaAnual([
+            { label: 'Horas requeridas', data: G.horasMO, fmt: v => fmtNum(v, 1) },
+            ...(horasJornada > 0 ? [
+                { label: 'Trabajadores', data: G.trabajadores, fmt: v => fmtNum(v) },
+                { label: 'Salario diario', data: G.costoHoraAnual.map(t => t * horasJornada) }
+            ] : [{ label: 'Costo por hora', data: G.costoHoraAnual }]),
+            { label: 'Costo MOD', data: G.costoMO, negrita: true }
+        ]));
+
+        // ---------- 8. GASTOS INDIRECTOS DE FABRICACIÓN ----------
+        const inflacion = num('inflacion-anual');
+        G.gifFijos = [];
+        G.gifVariables = [];
+        G.gastosIndirectos = [];
+        ANIOS.forEach(a => {
+            let fijos = 0;
+            document.querySelectorAll('.gasto-fijo-monto').forEach(input => {
+                fijos += (parseFloat(input.value) || 0) * Math.pow(1 + inflacion / 100, a);
+            });
+            let variables = 0;
+            document.querySelectorAll('.gasto-var-unidad').forEach(input => {
+                variables += (parseFloat(input.value) || 0) * G.unidadesProduccion[a];
+            });
+            G.gifFijos[a] = fijos;
+            G.gifVariables[a] = variables;
+            G.gastosIndirectos[a] = fijos + variables;
+        });
+        setHTML('gastos-indirectos-resultado', tablaAnual([
+            { label: 'Fijos (con inflación)', data: G.gifFijos },
+            { label: 'Variables', data: G.gifVariables },
+            { label: 'Total GIF', data: G.gastosIndirectos, negrita: true }
+        ]));
+
+        // ---------- 9. INVERSIONES Y DEPRECIACIÓN ----------
+        G.inversionesActivo = [];
+        G.depreciacion = [0, 0, 0, 0, 0];
+        let htmlInv = '';
+        document.querySelectorAll('#inversiones-container .inversion-item').forEach(fila => {
+            const nombre = fila.querySelector('.inv-nombre').value.trim();
+            const monto = parseFloat(fila.querySelector('.inv-monto').value) || 0;
+            const vidaUtil = parseFloat(fila.querySelector('.inv-vida').value) || 1;
+            const tipo = fila.querySelector('.inv-tipo').value;
+            if (!nombre || monto <= 0) return;
+            const inversion = { nombre, monto, vidaUtil, tipo, depreciacionAnual: [] };
+            let acumulada = 0;
+            ANIOS.forEach(a => {
+                const valorLibros = monto - acumulada;
+                let dep;
+                if (tipo === 'lineal') {
+                    // Nunca deprecia más de lo que queda por depreciar (ej. vida de 3.33 años)
+                    dep = Math.min(monto / vidaUtil, valorLibros);
+                } else {
+                    // Saldos decrecientes (doble tasa); en el último año de vida se deprecia lo que queda
+                    dep = (a + 1 >= Math.ceil(vidaUtil)) ? valorLibros : valorLibros * (2 / vidaUtil);
+                    dep = Math.min(dep, valorLibros);
+                }
+                dep = Math.max(0, dep);
+                acumulada += dep;
+                inversion.depreciacionAnual[a] = dep;
+                G.depreciacion[a] += dep;
+            });
+            G.inversionesActivo.push(inversion);
+            htmlInv += `<div class="font-semibold text-gray-700 mt-3">${nombre} — ${fmtMoneda(monto)}</div>` +
+                tablaAnual([{ label: 'Depreciación', data: inversion.depreciacionAnual }]);
+        });
+        G.activoFijo = G.inversionesActivo.reduce((s, i) => s + i.monto, 0);
+        htmlInv += '<div class="font-bold text-blue-600 mt-4">Depreciación total</div>' +
+            tablaAnual([{ label: 'Total', data: G.depreciacion, negrita: true }]);
+        setHTML('inversiones-resultado', G.inversionesActivo.length ? htmlInv : '<p>Agregue activos para calcular la depreciación.</p>');
+
+        // ---------- 10. GASTOS DE OPERACIÓN ----------
+        const pctCargaSocial = num('pct-carga-social');
+        G.gastosAdmin = [0, 0, 0, 0, 0];
+        G.sueldosAdmin = [0, 0, 0, 0, 0];
+        G.gastosVentas = [0, 0, 0, 0, 0];
+        G.cargaSocial = [0, 0, 0, 0, 0];
+        G.gastosOperacion = [];
+        document.querySelectorAll('#gastos-admin-container .gasto-admin-item').forEach(fila => {
+            const mensual = parseFloat(fila.querySelector('.gasto-admin-monto').value) || 0;
+            const tipo = fila.querySelector('.gasto-admin-tipo')?.value || 'inflacion';
+            ANIOS.forEach(a => {
+                let factor = 1;
+                if (tipo === 'inflacion') factor = Math.pow(1 + inflacion / 100, a);
+                if (tipo === 'salario') factor = Math.pow(1 + incSalarial / 100, a);
+                const anual = mensual * 12 * factor;
+                G.gastosAdmin[a] += anual;
+                if (tipo === 'salario') G.sueldosAdmin[a] += anual;
+            });
+        });
+        document.querySelectorAll('#gastos-ventas-container .gasto-ventas-pct').forEach(input => {
+            const pct = parseFloat(input.value) || 0;
+            ANIOS.forEach(a => { G.gastosVentas[a] += G.ventasProyeccion[a] * pct / 100; });
+        });
+        ANIOS.forEach(a => {
+            // Carga social sobre sueldos administrativos + mano de obra directa (como el Excel)
+            G.cargaSocial[a] = (G.sueldosAdmin[a] + G.costoMO[a]) * pctCargaSocial / 100;
+            G.gastosOperacion[a] = G.gastosAdmin[a] + G.gastosVentas[a] + G.cargaSocial[a];
+        });
+        setHTML('gastos-operacion-resultado', tablaAnual([
+            { label: 'Administración', data: G.gastosAdmin },
+            { label: 'Ventas', data: G.gastosVentas },
+            { label: 'Carga social', data: G.cargaSocial },
+            { label: 'Total (sin depreciación)', data: G.gastosOperacion, negrita: true }
+        ]));
+
+        // ---------- 11. CONDICIONES COMERCIALES ----------
+        const diasCV = num('dias-credito-ventas');
+        const diasCC = num('dias-credito-compras');
+        const descuento = num('descuento-pronto-pago');
+        G.diasCredito = { ventas: diasCV, compras: diasCC };
+        G.descuentoProntoPago = descuento;
+        G.cuentasPorCobrar = G.ventasProyeccion.map(v => v * diasCV / 360);
+        G.cuentasPorPagar = G.comprasMP.map(c => c * diasCC / 360);
+        setHTML('condiciones-comerciales-resultado', tablaAnual([
+            { label: 'Cuentas por cobrar (fin de año)', data: G.cuentasPorCobrar },
+            { label: 'Cuentas por pagar (fin de año)', data: G.cuentasPorPagar },
+            { label: 'Descuento posible por pronto pago', data: G.comprasMP.map(c => c * descuento / 100) }
+        ]));
+
+        // ---------- 12. COSTO DE PRODUCCIÓN Y DE LO VENDIDO ----------
+        const costoUnitInvIniPT = num('inv-inicial-pt'); // $ por unidad del inventario inicial (opcional)
+        G.costoProduccion = [];
+        G.costoUnitarioProduccion = [];
+        G.invInicialPT = [];
+        G.invFinalPT = [];
+        G.costoVendido = [];
+        ANIOS.forEach(a => {
+            // Se usa la MATERIA UTILIZADA (inv. inicial + compras − inv. final), no las compras
+            const cp = G.mpUtilizada[a] + G.costoMO[a] + G.gastosIndirectos[a];
+            const cu = G.unidadesProduccion[a] > 0 ? cp / G.unidadesProduccion[a] : 0;
+            G.costoProduccion[a] = cp;
+            G.costoUnitarioProduccion[a] = cu;
+            // El inventario inicial se valúa al costo del año ANTERIOR
+            G.invInicialPT[a] = a === 0 ? G.invInicialPTUnid[0] * (costoUnitInvIniPT || cu) : G.invFinalPT[a - 1];
+            G.invFinalPT[a] = G.invFinalPTUnid[a] * cu;
+            G.costoVendido[a] = G.invInicialPT[a] + cp - G.invFinalPT[a];
+        });
+        const cuInput = document.getElementById('costo-unitario-pt');
+        if (cuInput) cuInput.value = (G.costoUnitarioProduccion[0] || 0).toFixed(4);
+        setHTML('costo-produccion-anual', tablaAnual([
+            { label: 'Inv. inicial MP', data: G.invInicialMP },
+            { label: '(+) Compras MP', data: G.comprasMP },
+            { label: '(−) Inv. final MP', data: G.invFinalMP },
+            { label: '(=) Materia utilizada', data: G.mpUtilizada },
+            { label: '(+) MO directa', data: G.costoMO },
+            { label: '(+) GIF', data: G.gastosIndirectos },
+            { label: '(=) Costo de producción', data: G.costoProduccion, negrita: true },
+            { label: 'Costo unitario', data: G.costoUnitarioProduccion, fmt: v => fmtNum(v, 4) }
+        ]));
+        setHTML('costo-vendido-anual', tablaAnual([
+            { label: 'Inv. inicial PT', data: G.invInicialPT },
+            { label: '(+) Costo de producción', data: G.costoProduccion },
+            { label: '(−) Inv. final PT', data: G.invFinalPT },
+            { label: '(=) Costo de lo vendido', data: G.costoVendido, negrita: true }
+        ]));
+
+        // ---------- 13. VALUACIÓN DE INVENTARIOS ----------
+        setHTML('valuacion-mp', (htmlValMP || '') + tablaAnual([{ label: 'Total inv. final MP', data: G.invFinalMP, negrita: true }]));
+        setHTML('valuacion-pt', tablaAnual([
+            { label: 'Unidades inv. final', data: G.invFinalPTUnid, fmt: v => fmtNum(v) },
+            { label: 'Costo unitario', data: G.costoUnitarioProduccion, fmt: v => fmtNum(v, 4) },
+            { label: 'Valor inv. final PT', data: G.invFinalPT, negrita: true }
+        ]));
+
+        // ---------- 15a. FINANCIAMIENTO (se necesita antes del ERI por los intereses) ----------
+        G.inversionTotal = num('inversion-inicial', G.activoFijo);
+        G.saldoInicialExtra = num('saldo-inicial');
+        // Inventario que se compra con la inversión inicial y se mantiene (capital de trabajo)
+        G.invCapitalTrabajo = num('inv-capital-trabajo');
+        const pctFinanciamiento = num('pct-financiamiento');
+        const tasaInteres = num('tasa-interes');
+        const plazoAnios = num('plazo-credito', 5);
+        G.credito = G.inversionTotal * pctFinanciamiento / 100;
+        G.aportacion = G.inversionTotal - G.credito;
+        G.intereses = [0, 0, 0, 0, 0];
+        G.amortizacion = [0, 0, 0, 0, 0];
+        G.saldoDeuda = [0, 0, 0, 0, 0];
+        G.pagoMensual = 0;
+        if (G.credito > 0 && plazoAnios > 0) {
+            const i = tasaInteres / 100 / 12;
+            const n = Math.round(plazoAnios * 12);
+            G.pagoMensual = i > 0 ? G.credito * i / (1 - Math.pow(1 + i, -n)) : G.credito / n;
+            let saldo = G.credito;
+            for (let mes = 1; mes <= Math.min(n, 60); mes++) {
+                const interes = saldo * i;
+                const capital = Math.min(G.pagoMensual - interes, saldo);
+                saldo -= capital;
+                const a = Math.floor((mes - 1) / 12);
+                G.intereses[a] += interes;
+                G.amortizacion[a] += capital;
+                G.saldoDeuda[a] = Math.max(0, saldo);
+            }
+            for (let a = 1; a < 5; a++) {
+                if (Math.floor((n - 1) / 12) < a) G.saldoDeuda[a] = 0;
+            }
+        }
+        setHTML('tabla-amortizacion', G.credito > 0
+            ? `<p class="text-sm text-gray-600 mb-2">Crédito: <b>${fmtMoneda(G.credito)}</b> · Pago mensual: <b>${fmtMoneda(G.pagoMensual)}</b> · Aportación socios: <b>${fmtMoneda(G.aportacion)}</b></p>` +
+              tablaAnual([
+                  { label: 'Intereses', data: G.intereses },
+                  { label: 'Amortización de capital', data: G.amortizacion },
+                  { label: 'Saldo del crédito', data: G.saldoDeuda, negrita: true }
+              ])
+            : '<p class="text-sm text-gray-500">Sin crédito bancario (captura el % financiado para calcularlo).</p>');
+
+        // ---------- 14. ESTADO DE RESULTADOS ----------
+        const tasaISR = num('tasa-isr', 30) / 100;
+        const tasaPTU = num('tasa-ptu', 10) / 100;
+        G.utilidadBruta = [];
+        G.utilidadOperacion = [];
+        G.utilidadAntesImpuestos = [];
+        G.isr = [];
+        G.ptu = [];
+        G.utilidadNeta = [];
+        ANIOS.forEach(a => {
+            G.utilidadBruta[a] = G.ventasProyeccion[a] - G.costoVendido[a];
+            G.utilidadOperacion[a] = G.utilidadBruta[a] - G.gastosOperacion[a] - G.depreciacion[a];
+            G.utilidadAntesImpuestos[a] = G.utilidadOperacion[a] - G.intereses[a];
+            const base = Math.max(0, G.utilidadAntesImpuestos[a]);
+            G.isr[a] = base * tasaISR;
+            G.ptu[a] = base * tasaPTU;
+            G.utilidadNeta[a] = G.utilidadAntesImpuestos[a] - G.isr[a] - G.ptu[a];
+        });
+        setHTML('estado-resultados', tablaAnual([
+            { label: 'Ventas', data: G.ventasProyeccion, clase: 'bg-green-50', negrita: true },
+            { label: '(−) Costo de lo vendido', data: G.costoVendido },
+            { label: 'UTILIDAD BRUTA', data: G.utilidadBruta, clase: 'bg-blue-50', negrita: true },
+            { label: '(−) Gastos de operación', data: G.gastosOperacion },
+            { label: '(−) Depreciación', data: G.depreciacion },
+            { label: 'UTILIDAD DE OPERACIÓN', data: G.utilidadOperacion, clase: 'bg-yellow-50', negrita: true },
+            { label: '(−) Gastos financieros (intereses)', data: G.intereses },
+            { label: 'UTILIDAD ANTES DE IMPUESTOS', data: G.utilidadAntesImpuestos, negrita: true },
+            { label: `(−) ISR (${(tasaISR * 100).toFixed(0)}%)`, data: G.isr },
+            { label: `(−) PTU (${(tasaPTU * 100).toFixed(0)}%)`, data: G.ptu },
+            { label: 'UTILIDAD NETA', data: G.utilidadNeta, clase: 'bg-green-100', negrita: true }
+        ]));
+
+        // ---------- 15b. FLUJO DE EFECTIVO ----------
+        G.cobros = [];
+        G.pagosProveedores = [];
+        G.impuestos = [];
+        G.totalIngresosFE = [];
+        G.totalEgresosFE = [];
+        G.flujoNeto = [];
+        G.saldoEfectivo = [];
+        // Año 0: entra la aportación + el crédito (+ saldo inicial extra) y sale el activo fijo
+        G.saldoEfectivo0 = G.inversionTotal + G.saldoInicialExtra - G.activoFijo - G.invCapitalTrabajo;
+        let saldoAnterior = G.saldoEfectivo0;
+        ANIOS.forEach(a => {
+            const cxcAnterior = a === 0 ? 0 : G.cuentasPorCobrar[a - 1];
+            const cxpAnterior = a === 0 ? 0 : G.cuentasPorPagar[a - 1];
+            G.cobros[a] = G.ventasProyeccion[a] - G.cuentasPorCobrar[a] + cxcAnterior;
+            G.pagosProveedores[a] = G.comprasMP[a] - G.cuentasPorPagar[a] + cxpAnterior;
+            G.impuestos[a] = G.isr[a] + G.ptu[a];
+            G.totalIngresosFE[a] = G.cobros[a];
+            G.totalEgresosFE[a] = G.pagosProveedores[a] + G.costoMO[a] + G.gastosIndirectos[a] +
+                G.gastosOperacion[a] + G.intereses[a] + G.amortizacion[a] + G.impuestos[a];
+            G.flujoNeto[a] = G.totalIngresosFE[a] - G.totalEgresosFE[a];
+            G.saldoEfectivo[a] = saldoAnterior + G.flujoNeto[a];
+            saldoAnterior = G.saldoEfectivo[a];
+        });
+        const v0 = (x) => [x, ...ANIOS.map(() => null)];
+        const conCero = (arr) => [null, ...arr];
+        setHTML('flujo-efectivo-resultado', tablaAnual([
+            { seccion: 'INGRESOS', clase: 'bg-green-50' },
+            { label: 'Aportación de socios', data: v0(G.aportacion + G.saldoInicialExtra) },
+            { label: 'Crédito bancario', data: v0(G.credito) },
+            { label: 'Cobranza (ventas − CxC + CxC año anterior)', data: conCero(G.cobros) },
+            { seccion: 'EGRESOS', clase: 'bg-red-50' },
+            { label: 'Inversión en activo fijo y diferido', data: v0(G.activoFijo) },
+            ...(G.invCapitalTrabajo ? [{ label: 'Inventario inicial (capital de trabajo)', data: v0(G.invCapitalTrabajo) }] : []),
+            { label: 'Pago a proveedores de MP', data: conCero(G.pagosProveedores) },
+            { label: 'Mano de obra directa', data: conCero(G.costoMO) },
+            { label: 'Gastos indirectos', data: conCero(G.gastosIndirectos) },
+            { label: 'Gastos de operación', data: conCero(G.gastosOperacion) },
+            { label: 'Intereses', data: conCero(G.intereses) },
+            { label: 'Amortización del crédito', data: conCero(G.amortizacion) },
+            { label: 'Impuestos (ISR + PTU)', data: conCero(G.impuestos) },
+            { label: 'FLUJO NETO', data: [G.saldoEfectivo0, ...G.flujoNeto], clase: 'bg-blue-50', negrita: true },
+            { label: 'SALDO FINAL DE EFECTIVO', data: [G.saldoEfectivo0, ...G.saldoEfectivo], clase: 'bg-yellow-50', negrita: true }
+        ], true));
+
+        // ---------- 16. BALANCE GENERAL ----------
+        // El capital social incluye los inventarios iniciales (aportación en especie) para que cuadre
+        G.capitalSocial = G.aportacion + G.saldoInicialExtra + G.invInicialMP[0] + G.invInicialPT[0];
+        G.depAcumulada = [];
+        G.activoFijoNeto = [];
+        G.activoCirculante = [];
+        G.activoTotal = [];
+        G.pasivoTotal = [];
+        G.utilidadesAnteriores = [];
+        G.capital = [];
+        G.pasivoMasCapital = [];
+        let depAcum = 0, utilAcum = 0;
+        ANIOS.forEach(a => {
+            depAcum += G.depreciacion[a];
+            G.depAcumulada[a] = depAcum;
+            G.activoFijoNeto[a] = G.activoFijo - depAcum;
+            G.activoCirculante[a] = G.saldoEfectivo[a] + G.cuentasPorCobrar[a] + G.invFinalMP[a] + G.invFinalPT[a] + G.invCapitalTrabajo;
+            G.activoTotal[a] = G.activoCirculante[a] + G.activoFijoNeto[a];
+            G.pasivoTotal[a] = G.cuentasPorPagar[a] + G.saldoDeuda[a];
+            G.utilidadesAnteriores[a] = utilAcum;
+            utilAcum += G.utilidadNeta[a];
+            G.capital[a] = G.capitalSocial + G.utilidadesAnteriores[a] + G.utilidadNeta[a];
+            G.pasivoMasCapital[a] = G.pasivoTotal[a] + G.capital[a];
+        });
+        const diferencia = G.activoTotal.map((x, a) => x - G.pasivoMasCapital[a]);
+        const cuadra = diferencia.every(d => Math.abs(d) < 1);
+        setHTML('estado-situacion', tablaAnual([
+            { seccion: 'ACTIVO', clase: 'bg-blue-100' },
+            { label: 'Efectivo', data: G.saldoEfectivo },
+            { label: 'Cuentas por cobrar', data: G.cuentasPorCobrar },
+            { label: 'Inventario final de MP', data: G.invFinalMP },
+            { label: 'Inventario final de PT', data: G.invFinalPT },
+            ...(G.invCapitalTrabajo ? [{ label: 'Inventario (capital de trabajo)', data: ANIOS.map(() => G.invCapitalTrabajo) }] : []),
+            { label: 'Total activo circulante', data: G.activoCirculante, negrita: true },
+            { label: 'Activo fijo (costo)', data: ANIOS.map(() => G.activoFijo) },
+            { label: '(−) Depreciación acumulada', data: G.depAcumulada },
+            { label: 'Total activo fijo neto', data: G.activoFijoNeto, negrita: true },
+            { label: 'TOTAL ACTIVO', data: G.activoTotal, clase: 'bg-blue-50', negrita: true },
+            { seccion: 'PASIVO', clase: 'bg-red-100' },
+            { label: 'Proveedores (cuentas por pagar)', data: G.cuentasPorPagar },
+            { label: 'Crédito bancario', data: G.saldoDeuda },
+            { label: 'Total pasivo', data: G.pasivoTotal, negrita: true },
+            { seccion: 'CAPITAL CONTABLE', clase: 'bg-green-100' },
+            { label: 'Capital social', data: ANIOS.map(() => G.capitalSocial) },
+            { label: 'Resultados de ejercicios anteriores', data: G.utilidadesAnteriores },
+            { label: 'Resultado del ejercicio', data: G.utilidadNeta },
+            { label: 'Total capital', data: G.capital, negrita: true },
+            { label: 'TOTAL PASIVO + CAPITAL', data: G.pasivoMasCapital, clase: 'bg-green-50', negrita: true },
+            { label: 'Diferencia (debe ser 0)', data: diferencia }
+        ]) + (cuadra
+            ? '<p class="mt-2 text-sm font-semibold text-green-700">✔ El balance cuadra: Activo = Pasivo + Capital</p>'
+            : '<p class="mt-2 text-sm font-semibold text-red-700">✖ El balance NO cuadra, revisa los datos capturados</p>'));
+
+        // ---------- 17. EVALUACIÓN (WACC, VPN, TIR, B/C, PRI) Y RAZONES ----------
+        calcularEvaluacion(tasaISR + tasaPTU, tasaInteres);
+
+        generarResumenEjecutivo();
+    } catch (err) {
+        console.error('Error al recalcular:', err);
+    } finally {
+        _recalculando = false;
+    }
+    if (typeof verificarCompletitudSecciones === 'function') verificarCompletitudSecciones();
+}
+
+// Mantiene los inputs de costo de MP alineados con la receta sin perder lo que ya se escribió
+let _firmaMP = null;
+function sincronizarInputsCostoMP(materiasPrimasCargadas = null) {
+    const container = document.getElementById('costos-mp-container');
+    if (!container) return;
+    const firma = globalData.materiaPrima.map(m => m.nombre + '|' + m.unidad).join('§');
+    if (firma === _firmaMP && !materiasPrimasCargadas && container.querySelector('.costo-mp')) return;
+
+    // Guardamos los costos ya escritos (por nombre) antes de redibujar
+    const previos = {};
+    container.querySelectorAll('.costo-mp').forEach(input => { previos[input.dataset.nombre] = input.value; });
+
+    if (globalData.materiaPrima.length === 0) {
+        container.innerHTML = '<h4 class="font-semibold text-gray-700 mb-3">Costos Unitarios de Materia Prima</h4><p class="text-sm text-gray-600">Configure primero las materias primas</p>';
+        _firmaMP = firma;
         return;
     }
-
-    globalData.incrementoUnidades = incrementoProducto;
-
-    let html = '<div class="space-y-2">';
-    let mercadoPotencial = mercadoBase * (participacionMercado / 100);
-    let penetracion = penetracionInicial;
-
-    for (let i = 1; i <= 5; i++) {
-        if (i > 1) {
-            mercadoPotencial *= (1 + (incrementoPoblacion + incrementoProducto) / 100);
-            penetracion += incrementoPenetracion;
+    let html = '<h4 class="font-semibold text-gray-700 mb-3">Costos Unitarios de Materia Prima (Año 1)</h4>';
+    globalData.materiaPrima.forEach((mp, i) => {
+        let costo = previos[mp.nombre] ?? '';
+        if (materiasPrimasCargadas) {
+            const cargada = materiasPrimasCargadas.find(m => m.nombre_mp === mp.nombre);
+            if (cargada && cargada.costo_unitario !== null) costo = cargada.costo_unitario;
         }
-        const clientesPotenciales = Math.round(mercadoPotencial * (penetracion / 100));
-        globalData.penetracionMercado[i - 1] = penetracion;
-        html += `<div class="flex justify-between border-b pb-1"><span class="font-medium">Año ${i}:</span><span class="text-indigo-600 font-semibold">${clientesPotenciales.toLocaleString('es-MX')} personas (${penetracion.toFixed(1)}% penetración)</span></div>`;
-    }
-    html += '</div>';
-    document.getElementById('proyeccion-mercado').innerHTML = html;
+        const nombreSeguro = mp.nombre.replace(/"/g, '&quot;');
+        html += `<div class="costo-mp-item grid grid-cols-2 gap-2 mb-2">
+                <span class="text-sm text-gray-700 py-2">${mp.nombre} (${mp.unidad})</span>
+                <input type="number" class="costo-mp text-sm" data-index="${i}" data-nombre="${nombreSeguro}" placeholder="Costo por ${mp.unidad}" step="any" onchange="recalcularTodo()" value="${costo}">
+            </div>`;
+    });
+    container.innerHTML = html;
+    _firmaMP = firma;
 }
 
-// PESTAÑA 3: INGRESOS
-function calcularPptoVtas() {
-    const precioBase = parseFloat(document.getElementById('precio-unitario-base').value) || 0;
-    const incrementoPrecio = parseFloat(document.getElementById('incremento-precio').value) || 0;
-    let html = '<div class="space-y-2">';
-
-    for (let i = 1; i <= 5; i++) {
-        const precio = precioBase * Math.pow(1 + incrementoPrecio / 100, i - 1);
-        globalData.precioUnitario[i - 1] = precio;
-        const unidades = parseFloat(document.getElementById(`unidades-${i}`).value) || 0;
-        globalData.unidadesVenta[i - 1] = unidades;
-        const ventasAnuales = unidades * precio;
-        globalData.ventasProyeccion[i - 1] = ventasAnuales;
-        // Usa formato de moneda dinámico
-        html += `<div class="flex justify-between border-b pb-1"><span class="font-medium">Año ${i}: ${unidades.toLocaleString('es-MX')} × ${precio.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</span><span class="text-green-600 font-semibold">${ventasAnuales.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</span></div>`;
-    }
-    html += '</div>';
-    document.getElementById('ventas-proyeccion').innerHTML = html;
-    calcularPptoProd();
-    calcularGastosOperacion();
-    calcularCondicionesComerciales();
+// Valor presente neto de una serie de flujos (flujos[0] es el año 0)
+function vpn(tasa, flujos) {
+    return flujos.reduce((s, f, t) => s + f / Math.pow(1 + tasa, t), 0);
 }
 
-// PESTAÑA 4: CONDICIONES
-function calcularCondicionesComerciales() {
-    const diasCreditoVentas = parseFloat(document.getElementById('dias-credito-ventas').value) || 0;
-    const diasCreditoCompras = parseFloat(document.getElementById('dias-credito-compras').value) || 0;
-    const descuento = parseFloat(document.getElementById('descuento-pronto-pago').value) || 0;
-
-    globalData.diasCredito.ventas = diasCreditoVentas;
-    globalData.diasCredito.compras = diasCreditoCompras;
-    globalData.descuentoProntoPago = descuento;
-
-    let html = '<div class="space-y-3">';
-    for (let año = 0; año < 5; año++) {
-        const ventasAnuales = globalData.ventasProyeccion[año] || 0;
-        const comprasAnuales = globalData.comprasMP[año] || 0;
-        const cuentasPorCobrar = ventasAnuales * (diasCreditoVentas / 360);
-        const cuentasPorPagar = comprasAnuales * (diasCreditoCompras / 360);
-        const descuentoObtenido = comprasAnuales * (descuento / 100);
-
-        const cxc = cuentasPorCobrar.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        const cxp = cuentasPorPagar.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        const desc = descuentoObtenido.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-        html += `<div class="border-b pb-2"><div class="font-semibold">Año ${año + 1}</div><div class="text-sm text-gray-600">Cuentas por Cobrar: ${cxc}</div><div class="text-sm text-gray-600">Cuentas por Pagar: ${cxp}</div><div class="text-sm text-green-600">Descuento obtenido: ${desc}</div></div>`;
+// TIR por bisección (busca la tasa donde el VPN = 0)
+function tir(flujos) {
+    let bajo = -0.99, alto = 1;
+    while (vpn(alto, flujos) > 0 && alto < 1e6) alto *= 2;
+    if (vpn(bajo, flujos) * vpn(alto, flujos) > 0) return NaN;
+    for (let k = 0; k < 300; k++) {
+        const medio = (bajo + alto) / 2;
+        if (vpn(bajo, flujos) * vpn(medio, flujos) <= 0) alto = medio; else bajo = medio;
     }
-    html += '</div>';
-    document.getElementById('condiciones-comerciales-resultado').innerHTML = html;
-    calcularEstadoResultados();
+    return (bajo + alto) / 2;
 }
-// PESTAÑA 5: INVERSIONES
+
+function calcularEvaluacion(tasaImpuestos, tasaInteres) {
+    const G = globalData;
+    const ke = num('tasa-ke') / 100;
+    const kd = tasaInteres / 100;
+    const E = G.aportacion + G.saldoInicialExtra;
+    const D = G.credito;
+    const V = E + D;
+    G.wacc = V > 0 ? (E / V) * ke + (D / V) * kd * (1 - tasaImpuestos) : ke;
+
+    // Método "proyecto": flujo neto + intereses + amortización (antes de financiamiento)
+    // Método "flujo-neto": el flujo neto del flujo de efectivo tal cual (como el ejercicio de Lácteos)
+    const metodo = document.getElementById('metodo-vpn')?.value || 'proyecto';
+    G.flujoProyecto = ANIOS.map(a => metodo === 'flujo-neto'
+        ? G.flujoNeto[a]
+        : G.flujoNeto[a] + G.intereses[a] + G.amortizacion[a]);
+    const flujos = [-G.inversionTotal, ...G.flujoProyecto];
+    G.vpn = vpn(G.wacc, flujos);
+    G.tir = tir(flujos);
+    const vpFlujos = G.flujoProyecto.reduce((s, f, a) => s + f / Math.pow(1 + G.wacc, a + 1), 0);
+    G.beneficioCosto = G.inversionTotal > 0 ? vpFlujos / G.inversionTotal : NaN;
+
+    // Periodo de recuperación (años y meses)
+    let acumulado = -G.inversionTotal;
+    G.pri = null;
+    for (let a = 0; a < 5; a++) {
+        const antes = acumulado;
+        acumulado += G.flujoProyecto[a];
+        if (antes < 0 && acumulado >= 0) {
+            const fraccion = -antes / G.flujoProyecto[a];
+            let anios = a + Math.floor(fraccion);
+            let meses = Math.round((fraccion - Math.floor(fraccion)) * 12);
+            if (meses === 12) { anios += 1; meses = 0; }
+            G.pri = { anios, meses };
+            break;
+        }
+    }
+    if (G.inversionTotal <= 0) G.pri = { anios: 0, meses: 0 };
+    const textoPRI = G.pri ? `${G.pri.anios} años ${G.pri.meses} meses` : 'No se recupera en 5 años';
+
+    let htmlEval = `
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">WACC</div><div class="text-xl font-bold">${fmtPct(G.wacc)}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">VPN</div><div class="text-xl font-bold ${G.vpn >= 0 ? 'text-green-700' : 'text-red-700'}">${fmtMoneda(G.vpn)}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">TIR</div><div class="text-xl font-bold">${fmtPct(G.tir)}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Beneficio / Costo</div><div class="text-xl font-bold">${fmtVeces(G.beneficioCosto)}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Periodo de recuperación</div><div class="text-xl font-bold">${textoPRI}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Inversión total</div><div class="text-xl font-bold">${fmtMoneda(G.inversionTotal)}</div></div>
+        </div>
+        <p class="text-xs text-gray-500 mb-2">WACC = E/(D+E)·ke + D/(D+E)·kd·(1−t), con E = ${fmtMoneda(E)}, D = ${fmtMoneda(D)}, ke = ${(ke * 100).toFixed(2)}%, kd = ${(kd * 100).toFixed(2)}%, t = ${(tasaImpuestos * 100).toFixed(0)}% (ISR + PTU).</p>`;
+    htmlEval += tablaAnual([
+        { label: metodo === 'flujo-neto' ? 'Flujo neto' : 'Flujo del proyecto', data: [-G.inversionTotal, ...G.flujoProyecto] },
+        { label: 'Flujo descontado (WACC)', data: flujos.map((f, t) => f / Math.pow(1 + G.wacc, t)) }
+    ], true);
+    setHTML('evaluacion-resultado', htmlEval);
+
+    // Razones financieras
+    const pasivoCirculante = ANIOS.map(a => G.cuentasPorPagar[a] + (a < 4 ? G.amortizacion[a + 1] : G.saldoDeuda[a]));
+    const inventarios = ANIOS.map(a => G.invFinalMP[a] + G.invFinalPT[a] + (G.invCapitalTrabajo || 0));
+    const div = (x, y) => (y ? x / y : NaN);
+    // Apalancamiento: costos variables = MP utilizada + MOD + GIF variables + gastos de venta
+    const margenContribucion = ANIOS.map(a => G.ventasProyeccion[a] - (G.mpUtilizada[a] + G.costoMO[a] + G.gifVariables[a] + G.gastosVentas[a]));
+    const gao = ANIOS.map(a => div(margenContribucion[a], G.utilidadOperacion[a]));
+    const gaf = ANIOS.map(a => div(G.utilidadOperacion[a], G.utilidadAntesImpuestos[a]));
+    setHTML('razones-resultado', tablaAnual([
+        { seccion: 'LIQUIDEZ', clase: 'bg-blue-50' },
+        { label: 'Índice de liquidez (AC / PC)', data: ANIOS.map(a => div(G.activoCirculante[a], pasivoCirculante[a])), fmt: fmtVeces },
+        { label: 'Prueba del ácido ((AC − Inv) / PC)', data: ANIOS.map(a => div(G.activoCirculante[a] - inventarios[a], pasivoCirculante[a])), fmt: fmtVeces },
+        { label: 'Capital de trabajo (AC − PC)', data: ANIOS.map(a => G.activoCirculante[a] - pasivoCirculante[a]) },
+        { seccion: 'RENTABILIDAD', clase: 'bg-green-50' },
+        { label: 'ROE (Utilidad neta / Capital)', data: ANIOS.map(a => div(G.utilidadNeta[a], G.capital[a])), fmt: fmtPct },
+        { label: 'ROA (Utilidad neta / Activo total)', data: ANIOS.map(a => div(G.utilidadNeta[a], G.activoTotal[a])), fmt: fmtPct },
+        { label: 'Margen bruto', data: ANIOS.map(a => div(G.utilidadBruta[a], G.ventasProyeccion[a])), fmt: fmtPct },
+        { label: 'Margen de operación', data: ANIOS.map(a => div(G.utilidadOperacion[a], G.ventasProyeccion[a])), fmt: fmtPct },
+        { label: 'Margen neto', data: ANIOS.map(a => div(G.utilidadNeta[a], G.ventasProyeccion[a])), fmt: fmtPct },
+        { seccion: 'ESTRUCTURA', clase: 'bg-yellow-50' },
+        { label: 'Pasivo / Activo', data: ANIOS.map(a => div(G.pasivoTotal[a], G.activoTotal[a])), fmt: fmtPct },
+        { label: 'Capital / Activo', data: ANIOS.map(a => div(G.capital[a], G.activoTotal[a])), fmt: fmtPct },
+        { label: 'Cobertura de intereses (UO / intereses)', data: ANIOS.map(a => div(G.utilidadOperacion[a], G.intereses[a])), fmt: fmtVeces },
+        { seccion: 'OPERACIÓN', clase: 'bg-purple-50' },
+        { label: 'Rotación de cartera (ventas / CxC)', data: ANIOS.map(a => div(G.ventasProyeccion[a], G.cuentasPorCobrar[a])), fmt: fmtVeces },
+        { label: 'Rotación de inventarios (CV / inventarios)', data: ANIOS.map(a => div(G.costoVendido[a], inventarios[a])), fmt: fmtVeces },
+        { seccion: 'GRADOS DE APALANCAMIENTO', clase: 'bg-gray-100' },
+        { label: 'Operativo (GAO)', data: gao, fmt: fmtVeces },
+        { label: 'Financiero (GAF)', data: gaf, fmt: fmtVeces },
+        { label: 'Total (GAT)', data: ANIOS.map(a => gao[a] * gaf[a]), fmt: fmtVeces }
+    ]));
+}
+
+function generarResumenEjecutivo() {
+    const G = globalData;
+    const ventasTotal = G.ventasProyeccion.reduce((a, b) => a + b, 0);
+    const utilidadNeta5 = G.utilidadNeta.reduce((a, b) => a + b, 0);
+    const html = `
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-green-100 p-3 rounded-lg text-center">
+                <div class="text-2xl font-bold text-green-700">${fmtMoneda(ventasTotal)}</div>
+                <div class="text-sm text-green-600">Ingresos totales (5 años)</div>
+            </div>
+            <div class="bg-blue-100 p-3 rounded-lg text-center">
+                <div class="text-2xl font-bold text-blue-700">${fmtMoneda(utilidadNeta5)}</div>
+                <div class="text-sm text-blue-600">Utilidad neta (5 años)</div>
+            </div>
+            <div class="bg-purple-100 p-3 rounded-lg text-center">
+                <div class="text-2xl font-bold text-purple-700">${fmtMoneda(G.vpn)}</div>
+                <div class="text-sm text-purple-600">VPN</div>
+            </div>
+            <div class="bg-yellow-100 p-3 rounded-lg text-center">
+                <div class="text-2xl font-bold text-yellow-700">${fmtPct(G.tir, 1)}</div>
+                <div class="text-sm text-yellow-600">TIR</div>
+            </div>
+        </div>
+        <div class="mt-4 text-sm text-gray-600">
+            <p><strong>Recomendación:</strong> ${G.vpn > 0 ? 'El VPN es positivo: el proyecto genera valor y es viable.' : 'El VPN es negativo o cero: revisar costos, precios o financiamiento.'}</p>
+            <p><strong>Participación de mercado:</strong> Año 1: ${(G.penetracionMercado[0] || 0).toFixed(2)}% → Año 5: ${(G.penetracionMercado[4] || 0).toFixed(2)}%</p>
+        </div>`;
+    setHTML('resumen-ejecutivo', html);
+}
+
+// Las funciones de siempre (las llama el HTML) ahora recalculan todo en orden
+function calcularPlan() { recalcularTodo(); }
+function calcularFactSensibil() { recalcularTodo(); }
+function calcularPptoVtas() { recalcularTodo(); }
+function calcularCondicionesComerciales() { recalcularTodo(); }
+function calcularInversiones() { recalcularTodo(); }
+function calcularPptoProd() { recalcularTodo(); }
+function calcularPptoMtp() { recalcularTodo(); }
+function calcularComprasMP() { recalcularTodo(); }
+function calcularPptoMO() { recalcularTodo(); }
+function calcularGastosIndirectos() { recalcularTodo(); }
+function calcularCostoProduccion() { recalcularTodo(); }
+function calcularGastosOperacion() { recalcularTodo(); }
+function calcularValuacionInv() { recalcularTodo(); }
+function calcularEstadoResultados() { recalcularTodo(); }
+function calcularEstadoSituacion() { recalcularTodo(); }
+function calcularFlujoEfectivo() { recalcularTodo(); }
+
+function actualizarCostosMP(materiasPrimasCargadas = null) {
+    recalcularTodo(); // arma la lista de MP
+    sincronizarInputsCostoMP(materiasPrimasCargadas);
+    recalcularTodo();
+}
+
+// ---- Filas dinámicas ----
 function agregarInversion(inversion = null) {
     const container = document.getElementById('inversiones-container');
     const newRow = document.createElement('div');
@@ -447,78 +1220,19 @@ function agregarInversion(inversion = null) {
     const monto = inversion ? inversion.monto : '';
     const vida = inversion ? inversion.vida_util_anios : '';
     const tipo = inversion ? inversion.metodo_depreciacion : 'lineal';
-    newRow.innerHTML = `<input type="text" placeholder="Nombre Activo" class="inv-nombre text-sm col-span-1" value="${nombre || ''}"><input type="number" placeholder="Monto" class="inv-monto text-sm col-span-1" step="0.01" value="${monto || ''}"><input type="number" placeholder="Vida útil" class="inv-vida text-sm col-span-1" value="${vida || ''}"><select class="inv-tipo text-sm col-span-1"><option value="lineal" ${tipo === 'lineal' ? 'selected' : ''}>Lineal</option><option value="acelerada" ${tipo === 'acelerada' ? 'selected' : ''}>Acelerada</option></select><button onclick="calcularInversiones()" class="bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs col-span-1">Calcular</button>`;
+    newRow.innerHTML = `<input type="text" placeholder="Nombre Activo" class="inv-nombre text-sm col-span-1" onchange="recalcularTodo()" value="${nombre || ''}"><input type="number" placeholder="Monto" class="inv-monto text-sm col-span-1" step="any" onchange="recalcularTodo()" value="${monto || ''}"><input type="number" placeholder="Vida útil (años)" class="inv-vida text-sm col-span-1" step="any" onchange="recalcularTodo()" value="${vida || ''}"><select class="inv-tipo text-sm col-span-1" onchange="recalcularTodo()"><option value="lineal" ${tipo === 'lineal' ? 'selected' : ''}>Lineal</option><option value="acelerada" ${tipo === 'acelerada' ? 'selected' : ''}>Acelerada</option></select><button onclick="recalcularTodo()" class="bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs col-span-1">Calcular</button>`;
     container.appendChild(newRow);
 }
 
-function calcularInversiones() {
-    const nombres = document.querySelectorAll('.inv-nombre');
-    const montos = document.querySelectorAll('.inv-monto');
-    const vidas = document.querySelectorAll('.inv-vida');
-    const tipos = document.querySelectorAll('.inv-tipo');
-    globalData.inversionesActivo = [];
-    globalData.depreciacion = [0, 0, 0, 0, 0];
-    let html = '<div class="space-y-4">';
-
-    for (let i = 0; i < nombres.length; i++) {
-        const nombre = nombres[i].value.trim();
-        const monto = parseFloat(montos[i].value) || 0;
-        const vidaUtil = parseFloat(vidas[i].value) || 1;
-        const tipo = tipos[i].value;
-
-        if (nombre && monto > 0) {
-            const inversion = { nombre, monto, vidaUtil, tipo, depreciacionAnual: [] };
-            const montoFmt = monto.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-            html += `<div class="border-b pb-3"><div class="font-semibold text-gray-700">${nombre} - ${montoFmt}</div>`;
-            for (let año = 0; año < 5; año++) {
-                let depreciacion = 0;
-                if (tipo === 'lineal') {
-                    depreciacion = año < vidaUtil ? monto / vidaUtil : 0;
-                } else {
-                    const factor = 2 / vidaUtil;
-                    let valorLibros = monto;
-                    for (let a = 0; a < año; a++) { valorLibros -= valorLibros * factor; }
-                    depreciacion = (año < vidaUtil && valorLibros > 0) ? Math.min(valorLibros, valorLibros * factor) : 0;
-                }
-                inversion.depreciacionAnual[año] = depreciacion;
-                globalData.depreciacion[año] += depreciacion;
-                const depFmt = depreciacion.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-                html += `<div class="text-sm text-gray-600">Año ${año + 1}: ${depFmt}</div>`;
-            }
-            html += '</div>';
-            globalData.inversionesActivo.push(inversion);
-        }
-    }
-    html += '<div class="font-bold text-lg text-blue-600 mt-4">Depreciación Total por Año:</div>';
-    for (let año = 0; año < 5; año++) {
-        const depTotalFmt = globalData.depreciacion[año].toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<div class="flex justify-between text-lg"><span>Año ${año + 1}:</span><span class="font-bold">${depTotalFmt}</span></div>`;
-    }
-    html += '</div>';
-    document.getElementById('inversiones-resultado').innerHTML = html;
-    calcularEstadoResultados();
+function agregarProducto(prod = null) {
+    const container = document.getElementById('productos-container');
+    const newRow = document.createElement('div');
+    newRow.className = 'producto-item grid grid-cols-4 gap-2 mb-2';
+    const v = (k) => (prod && prod[k] !== undefined && prod[k] !== null) ? prod[k] : '';
+    newRow.innerHTML = `<input type="text" placeholder="Producto" class="prod-nombre text-sm" data-opcional onchange="recalcularTodo()" value="${String(v('nombre')).replace(/"/g, '&quot;')}"><input type="number" placeholder="Unidades año 1" class="prod-unidades text-sm" data-opcional step="any" onchange="recalcularTodo()" value="${v('unidades')}"><input type="number" placeholder="Precio venta" class="prod-precio text-sm" data-opcional step="any" onchange="recalcularTodo()" value="${v('precio')}"><input type="number" placeholder="Costo unitario" class="prod-costo text-sm" data-opcional step="any" onchange="recalcularTodo()" value="${v('costo')}">`;
+    container.appendChild(newRow);
 }
 
-// PESTAÑA 6: PRODUCCIÓN
-function calcularPptoProd() {
-    const invInicial = parseFloat(document.getElementById('inv-inicial-prod').value) || 0;
-    let html = '<div class="space-y-2">';
-    for (let i = 1; i <= 5; i++) {
-        const ventasProyectadas = globalData.unidadesVenta[i - 1] || 0;
-        const invFinal = parseFloat(document.getElementById(`inv-final-${i}`).value) || 0;
-        const invInicialAnual = i === 1 ? invInicial : (parseFloat(document.getElementById(`inv-final-${i - 1}`).value) || 0);
-        const produccionRequerida = ventasProyectadas + invFinal - invInicialAnual;
-        globalData.unidadesProduccion[i - 1] = Math.max(0, produccionRequerida);
-        html += `<div class="flex justify-between border-b pb-1"><span class="font-medium">Año ${i}:</span><span class="text-blue-600 font-semibold">${Math.max(0, produccionRequerida).toLocaleString('es-MX')} unidades</span></div>`;
-    }
-    html += '</div>';
-    document.getElementById('produccion-proyeccion').innerHTML = html;
-    calcularPptoMtp();
-    calcularPptoMO();
-}
-
-// PESTAÑA 7: MATERIA PRIMA
 function agregarMateriaPrima(mp = null) {
     const container = document.getElementById('receta-container');
     const newRow = document.createElement('div');
@@ -526,189 +1240,17 @@ function agregarMateriaPrima(mp = null) {
     const nombre = mp ? mp.nombre_mp : '';
     const cantidad = mp ? mp.cantidad_por_unidad_prod : '';
     const unidad = mp ? mp.unidad_medida : '';
-    newRow.innerHTML = `<input type="text" placeholder="Materia Prima" class="receta-mp text-sm" onchange="calcularPptoMtp()" value="${nombre || ''}"><input type="number" placeholder="Cantidad por unidad" class="receta-cant text-sm" step="0.001" onchange="calcularPptoMtp()" value="${cantidad || ''}"><input type="text" placeholder="Unidad" class="receta-unidad text-sm" value="${unidad || ''}">`;
+    newRow.innerHTML = `<input type="text" placeholder="Materia Prima" class="receta-mp text-sm" onchange="calcularPptoMtp()" value="${nombre || ''}"><input type="number" placeholder="Cantidad por unidad" class="receta-cant text-sm" step="any" onchange="calcularPptoMtp()" value="${cantidad || ''}"><input type="text" placeholder="Unidad" class="receta-unidad text-sm" onchange="calcularPptoMtp()" value="${unidad || ''}">`;
     container.appendChild(newRow);
 }
 
-function calcularPptoMtp() {
-    const materiasPrimas = document.querySelectorAll('.receta-mp');
-    const cantidades = document.querySelectorAll('.receta-cant');
-    const unidades = document.querySelectorAll('.receta-unidad');
-    globalData.materiaPrima = [];
-    let html = '<div class="space-y-3">';
-    for (let i = 0; i < materiasPrimas.length; i++) {
-        const nombreMP = materiasPrimas[i].value.trim();
-        const cantidadPorUnidad = parseFloat(cantidades[i].value) || 0;
-        const unidad = unidades[i].value.trim();
-        if (nombreMP && cantidadPorUnidad > 0) {
-            const mpData = { nombre: nombreMP, cantidadPorUnidad, unidad: unidad || 'unidad', consumoAnual: [] };
-            globalData.materiaPrima.push(mpData);
-            html += `<div class="border-b pb-3"><div class="font-semibold text-gray-700 mb-1">${nombreMP}</div>`;
-            for (let año = 0; año < 5; año++) {
-                const consumoTotal = globalData.unidadesProduccion[año] * cantidadPorUnidad;
-                mpData.consumoAnual[año] = consumoTotal;
-                html += `<div class="text-sm text-gray-600">Año ${año + 1}: ${consumoTotal.toLocaleString('es-MX', { minimumFractionDigits: 3 })} ${unidad || 'unidad'}</div>`;
-            }
-            html += '</div>';
-        }
-    }
-    html += '</div>';
-    document.getElementById('consumo-mp').innerHTML = html;
-    actualizarCostosMP();
-    calcularComprasMP();
-}
-
-// PESTAÑA 8: COMPRAS MP
-function actualizarCostosMP(materiasPrimasCargadas = null) {
-    const container = document.getElementById('costos-mp-container');
-
-    // Si no hay materias primas, mostramos mensaje y salimos
-    if (globalData.materiaPrima.length === 0) {
-        container.innerHTML = `
-            <h4 class="font-semibold text-gray-700 mb-3">Costos Unitarios de Materia Prima</h4>
-            <p class="text-sm text-gray-600">Configure primero las materias primas</p>
-        `;
-        calcularComprasMP();
-        return;
-    }
-
-    let html = '<h4 class="font-semibold text-gray-700 mb-3">Costos Unitarios de Materia Prima</h4>';
-
-    for (let i = 0; i < globalData.materiaPrima.length; i++) {
-        const mp = globalData.materiaPrima[i];
-
-        // --- CORRECCIÓN IMPORTANTE ---
-        // Primero intentamos usar el valor que ya tenemos en memoria (globalData)
-        // Si no existe, usamos 0.
-        let costo = globalData.costoMP[i] || 0;
-
-        // Solo si estamos cargando un proyecto guardado (materiasPrimasCargadas), sobrescribimos con ese dato
-        if (materiasPrimasCargadas) {
-            const mpCargada = materiasPrimasCargadas.find(m => m.nombre_mp === mp.nombre);
-            if (mpCargada) {
-                costo = mpCargada.costo_unitario;
-            }
-        }
-
-        html += `
-            <div class="costo-mp-item grid grid-cols-2 gap-2 mb-2">
-                <span class="text-sm text-gray-700 py-2">${mp.nombre} (${mp.unidad})</span>
-                <input type="number" class="costo-mp text-sm" data-index="${i}" placeholder="Costo por ${mp.unidad}" step="0.01" onchange="calcularComprasMP()" value="${costo || ''}">
-            </div>
-        `;
-    }
-
-    container.innerHTML = html;
-    // Importante: No llamamos a calcularComprasMP() aquí para evitar bucles infinitos o re-cálculos prematuros
-    // calcularComprasMP(); <--- Esta línea a veces causa problemas, mejor la quitamos de aquí o la dejamos al final si es necesario, pero con cuidado.
-    // Para tu caso, dejémosla comentada o al final solo si es inicialización.
-    // Mejor dejémosla activa pero sabiendo que ya tenemos el valor correcto en 'value'.
-    calcularComprasMP();
-}
-
-function calcularComprasMP() {
-    const costosMP = document.querySelectorAll('.costo-mp');
-    globalData.costoMP = [];
-    globalData.comprasMP = [0, 0, 0, 0, 0]; // Reiniciamos
-
-    // Guardamos los costos unitarios
-    for (let i = 0; i < costosMP.length; i++) {
-        globalData.costoMP[i] = parseFloat(costosMP[i].value) || 0;
-    }
-
-    const invInicialMP = parseFloat(document.getElementById('inv-inicial-mp').value) || 0;
-    const invFinalMPPct = parseFloat(document.getElementById('inv-final-mp-pct').value) || 10;
-
-    let html = '<div class="space-y-4">';
-    let totalCompras = [0, 0, 0, 0, 0];
-
-    for (let mpIndex = 0; mpIndex < globalData.materiaPrima.length; mpIndex++) {
-        const mp = globalData.materiaPrima[mpIndex];
-        const costoUnitario = globalData.costoMP[mpIndex] || 0;
-
-        if (costoUnitario > 0) {
-            html += `<div class="border-b pb-3"><div class="font-semibold text-gray-700 mb-2">${mp.nombre}</div>`;
-
-            for (let año = 0; año < 5; año++) {
-                // 1. Lo que necesitamos consumir para producir
-                const requerimiento = mp.consumoAnual[año] || 0;
-
-                // 2. Lo que queremos que sobre al final (Inventario Final)
-                const invFinalMP = requerimiento * (invFinalMPPct / 100);
-
-                // 3. Lo que ya tenemos al principio (Inventario Inicial)
-                let invInicialEsteAno = 0;
-                if (año === 0) {
-                    // Año 1: Usamos lo que pusiste en la casilla
-                    invInicialEsteAno = invInicialMP;
-                } else {
-                    // Años 2-5: El inicial es lo que sobró del año pasado
-                    // (Consumo Año Anterior * %)
-                    const consumoAnterior = mp.consumoAnual[año - 1] || 0;
-                    invInicialEsteAno = consumoAnterior * (invFinalMPPct / 100);
-                }
-
-                // 4. Fórmula: (Lo que necesito + Lo que quiero guardar) - Lo que ya tengo
-                let comprasRequeridas = requerimiento + invFinalMP - invInicialEsteAno;
-
-                // Si el resultado es negativo (tengo de sobra), no compro nada (0)
-                comprasRequeridas = Math.max(0, comprasRequeridas);
-
-                const costoCompras = comprasRequeridas * costoUnitario;
-
-                // Sumamos al total anual
-                totalCompras[año] += costoCompras;
-
-                // Formato de moneda correcto
-                const costoFmt = costoCompras.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-                html += `<div class="text-sm text-gray-600">Año ${año + 1}: ${costoFmt}</div>`;
-            }
-            html += '</div>';
-        }
-    }
-
-    html += '<div class="font-bold text-lg text-indigo-600 mt-4">Total de Compras por Año:</div>';
-    for (let año = 0; año < 5; año++) {
-        const totalFmt = totalCompras[año].toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<div class="flex justify-between text-lg"><span>Año ${año + 1}:</span><span class="font-bold">${totalFmt}</span></div>`;
-    }
-    html += '</div>';
-
-    globalData.comprasMP = totalCompras;
-    document.getElementById('compras-mp-resultado').innerHTML = html;
-
-    // Actualizamos las cadenas dependientes
-    calcularCostoProduccion();
-    calcularCondicionesComerciales();
-}
-
-// PESTAÑA 10: MANO DE OBRA
-function calcularPptoMO() {
-    const tiempoPorUnidad = parseFloat(document.getElementById('tiempo-unidad').value) || 0;
-    const costoPorHora = parseFloat(document.getElementById('costo-hora').value) || 0;
-    let html = '<div class="space-y-2">';
-    for (let i = 0; i < 5; i++) {
-        const unidadesProducir = globalData.unidadesProduccion[i] || 0;
-        const horasRequeridas = unidadesProducir * tiempoPorUnidad;
-        const costoMO = horasRequeridas * costoPorHora;
-        globalData.costoMO[i] = costoMO;
-        const costoFmt = costoMO.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<div class="flex justify-between border-b pb-2"><div><div class="font-medium">Año ${i + 1}</div><div class="text-sm text-gray-600">${horasRequeridas.toLocaleString('es-MX', { minimumFractionDigits: 1 })} horas</div></div><div class="text-right"><div class="text-lg font-semibold text-blue-600">${costoFmt}</div></div></div>`;
-    }
-    html += '</div>';
-    document.getElementById('costo-mo').innerHTML = html;
-    calcularCostoProduccion();
-}
-
-// PESTAÑA 11: GASTOS INDIRECTOS
 function agregarGastoFijo(gasto = null) {
     const container = document.getElementById('gastos-fijos-container');
     const newRow = document.createElement('div');
     newRow.className = 'gasto-fijo-item grid grid-cols-2 gap-2 mt-2';
     const concepto = gasto ? gasto.concepto : '';
     const monto = gasto ? gasto.monto_anual : '';
-    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-fijo-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto anual" class="gasto-fijo-monto text-sm" step="0.01" onchange="calcularGastosIndirectos()" value="${monto || ''}">`;
+    newRow.innerHTML = `<input type="text" placeholder="Concepto (ej: Renta)" class="gasto-fijo-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto anual" class="gasto-fijo-monto text-sm" step="any" onchange="calcularGastosIndirectos()" value="${monto || ''}">`;
     container.appendChild(newRow);
 }
 
@@ -719,75 +1261,18 @@ function agregarGastoVariable(gasto = null) {
     const concepto = gasto ? gasto.concepto : '';
     const porUnidad = gasto ? gasto.por_unidad : '';
     const unidad = gasto ? gasto.unidad : '';
-    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-var-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Por unidad" class="gasto-var-unidad text-sm" step="0.001" onchange="calcularGastosIndirectos()" value="${porUnidad || ''}"><input type="text" placeholder="Unidad" class="gasto-var-tipo text-sm" value="${unidad || ''}">`;
+    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-var-concepto text-sm" data-opcional value="${concepto || ''}"><input type="number" placeholder="Por unidad" class="gasto-var-unidad text-sm" data-opcional step="any" onchange="calcularGastosIndirectos()" value="${porUnidad || ''}"><input type="text" placeholder="Unidad" class="gasto-var-tipo text-sm" data-opcional value="${unidad || ''}">`;
     container.appendChild(newRow);
 }
 
-function calcularGastosIndirectos() {
-    const gastosFijos = document.querySelectorAll('.gasto-fijo-monto');
-    const gastosVariables = document.querySelectorAll('.gasto-var-unidad');
-    const inflacion = parseFloat(document.getElementById('inflacion-anual').value) || 0;
-    let html = '<div class="space-y-3">';
-
-    for (let año = 0; año < 5; año++) {
-        let totalFijos = 0;
-        gastosFijos.forEach(input => { totalFijos += (parseFloat(input.value) || 0) * Math.pow(1 + inflacion / 100, año); });
-        let totalVariables = 0;
-        gastosVariables.forEach(input => { totalVariables += (parseFloat(input.value) || 0) * (globalData.unidadesProduccion[año] || 0); });
-
-        const totalGastosIndirectos = totalFijos + totalVariables;
-        globalData.gastosIndirectos[año] = totalGastosIndirectos;
-
-        const totalFmt = totalGastosIndirectos.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<div class="flex justify-between border-b pb-2"><div><div class="font-medium">Año ${año + 1}</div><div class="text-xs text-gray-500">Fijos: ${totalFijos.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div><div class="text-xs text-gray-500">Variables: ${totalVariables.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div></div><div class="text-lg font-semibold text-purple-600">${totalFmt}</div></div>`;
-    }
-    html += '</div>';
-    document.getElementById('gastos-indirectos-resultado').innerHTML = html;
-    calcularCostoProduccion();
-}
-
-// PESTAÑA 12: COSTO VENDIDO
-function calcularCostoProduccion() {
-    let html = '<div class="space-y-2">';
-    let htmlVendido = '<div class="space-y-2">';
-    const invInicialPT = parseFloat(document.getElementById('inv-inicial-pt').value) || 0;
-    for (let año = 0; año < 5; año++) {
-        const costoMP = globalData.comprasMP[año] || 0;
-        const costoMO = globalData.costoMO[año] || 0;
-        const gastosInd = globalData.gastosIndirectos[año] || 0;
-        const costoProduccionTotal = costoMP + costoMO + gastosInd;
-        globalData.costoProduccion[año] = costoProduccionTotal;
-        const unidadesProducidas = globalData.unidadesProduccion[año] || 0;
-        const costoUnitario = unidadesProducidas > 0 ? costoProduccionTotal / unidadesProducidas : 0;
-        globalData.costoUnitarioProduccion[año] = costoUnitario;
-        if (año === 0) { document.getElementById('costo-unitario-pt').value = costoUnitario.toFixed(2); }
-        const invFinalPT = parseFloat(document.getElementById(`inv-final-${año + 1}`).value) || 0;
-        const invInicialPTAnual = año === 0 ? invInicialPT * costoUnitario : parseFloat(document.getElementById(`inv-final-${año}`).value) * costoUnitario;
-        const costoVendido = invInicialPTAnual + costoProduccionTotal - (invFinalPT * costoUnitario);
-        globalData.costoVendido[año] = Math.max(0, costoVendido);
-
-        const prodFmt = costoProduccionTotal.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        const vendFmt = globalData.costoVendido[año].toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-        html += `<div class="flex justify-between border-b pb-2"><div><div class="font-medium">Año ${año + 1}</div><div class="text-xs text-gray-500">MP: ${costoMP.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div><div class="text-xs text-gray-500">MO: ${costoMO.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div><div class="text-xs text-gray-500">GI: ${gastosInd.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div></div><div class="text-lg font-semibold text-green-600">${prodFmt}</div></div>`;
-        htmlVendido += `<div class="flex justify-between border-b pb-2"><span class="font-medium">Año ${año + 1}</span><span class="text-lg font-semibold text-red-600">${vendFmt}</span></div>`;
-    }
-    html += '</div>';
-    htmlVendido += '</div>';
-    document.getElementById('costo-produccion-anual').innerHTML = html;
-    document.getElementById('costo-vendido-anual').innerHTML = htmlVendido;
-    calcularEstadoResultados();
-    calcularValuacionInv();
-}
-
-// PESTAÑA 13: GASTOS OPERACIÓN
 function agregarGastoAdmin(gasto = null) {
     const container = document.getElementById('gastos-admin-container');
     const newRow = document.createElement('div');
-    newRow.className = 'gasto-admin-item grid grid-cols-2 gap-2 mb-2';
+    newRow.className = 'gasto-admin-item grid grid-cols-3 gap-2 mb-2';
     const concepto = gasto ? gasto.concepto : '';
     const monto = gasto ? gasto.monto_mensual : '';
-    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-admin-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto mensual" class="gasto-admin-monto text-sm" step="0.01" onchange="calcularGastosOperacion()" value="${monto || ''}">`;
+    const tipo = (gasto && gasto.tipo) ? gasto.tipo : 'inflacion';
+    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-admin-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto mensual" class="gasto-admin-monto text-sm" step="any" onchange="calcularGastosOperacion()" value="${monto || ''}"><select class="gasto-admin-tipo text-sm" onchange="calcularGastosOperacion()" title="¿Con qué sube cada año?"><option value="inflacion" ${tipo === 'inflacion' ? 'selected' : ''}>Sube con inflación</option><option value="salario" ${tipo === 'salario' ? 'selected' : ''}>Es sueldo (sube con incremento salarial)</option><option value="fijo" ${tipo === 'fijo' ? 'selected' : ''}>No cambia</option></select>`;
     container.appendChild(newRow);
 }
 
@@ -797,313 +1282,59 @@ function agregarGastoVentas(gasto = null) {
     newRow.className = 'gasto-ventas-item grid grid-cols-2 gap-2 mb-2';
     const concepto = gasto ? gasto.concepto : '';
     const porcentaje = gasto ? gasto.porcentaje_sobre_ventas : '';
-    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-ventas-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="% de ventas" class="gasto-ventas-pct text-sm" step="0.1" onchange="calcularGastosOperacion()" value="${porcentaje || ''}">`;
+    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-ventas-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="% de ventas" class="gasto-ventas-pct text-sm" step="any" onchange="calcularGastosOperacion()" value="${porcentaje || ''}">`;
     container.appendChild(newRow);
 }
 
-function calcularGastosOperacion() {
-    const gastosAdmin = document.querySelectorAll('.gasto-admin-monto');
-    const gastosVentas = document.querySelectorAll('.gasto-ventas-pct');
-    let html = '<div class="space-y-2">';
-    for (let año = 0; año < 5; año++) {
-        let totalAdmin = 0;
-        gastosAdmin.forEach(input => { totalAdmin += (parseFloat(input.value) || 0) * 12; });
-        let totalVentas = 0;
-        const ventasAnuales = globalData.ventasProyeccion[año] || 0;
-        gastosVentas.forEach(input => { totalVentas += ventasAnuales * (parseFloat(input.value) || 0) / 100; });
-        const totalGastosOp = totalAdmin + totalVentas;
-        globalData.gastosOperacion[año] = totalGastosOp;
+// Campos nuevos que se guardan juntos en la columna parametros_extra (JSON)
+const CAMPOS_EXTRA = [
+    'usos-mensuales', 'dias-inventario', 'dias-laborables', 'inflacion-mp',
+    'tiempo-unidad-tipo', 'horas-jornada', 'incremento-salarial', 'pct-carga-social',
+    'tasa-isr', 'tasa-ptu', 'pct-financiamiento', 'tasa-interes', 'plazo-credito',
+    'tasa-ke', 'inv-inicial-pt', 'inv-capital-trabajo', 'metodo-vpn'
+];
 
-        const totalOpFmt = totalGastosOp.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<div class="flex justify-between border-b pb-2"><div><div class="font-medium">Año ${año + 1}</div><div class="text-xs text-gray-500">Admin: ${totalAdmin.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div><div class="text-xs text-gray-500">Ventas: ${totalVentas.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</div></div><div class="text-lg font-semibold text-orange-600">${totalOpFmt}</div></div>`;
-    }
-    html += '</div>';
-    document.getElementById('gastos-operacion-resultado').innerHTML = html;
-    calcularEstadoResultados();
-}
-
-// PESTAÑA 9: VALUACIÓN INV.
-function calcularValuacionInv() {
-    const invFinalMPPct = parseFloat(document.getElementById('inv-final-mp-pct').value) || 10;
-    let html_mp = '<div class="space-y-4" style="max-height: 400px; overflow-y: auto;">';
-    let html_pt = '<div class="space-y-4">';
-    let totalValuacionMP = [0, 0, 0, 0, 0];
-    for (let mpIndex = 0; mpIndex < globalData.materiaPrima.length; mpIndex++) {
-        const mp = globalData.materiaPrima[mpIndex];
-        const costoUnitario = globalData.costoMP[mpIndex] || 0;
-        html_mp += `<div class="border-b pb-3"><div class="font-semibold text-gray-700 mb-2">${mp.nombre}</div>`;
-        for (let año = 0; año < 5; año++) {
-            const requerimiento = mp.consumoAnual[año] || 0;
-            const invFinalUnidades = requerimiento * (invFinalMPPct / 100);
-            const valorInventario = invFinalUnidades * costoUnitario;
-            totalValuacionMP[año] += valorInventario;
-
-            const valFmt = valorInventario.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-            const costFmt = costoUnitario.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-            html_mp += `<div class="text-sm text-gray-600">Año ${año + 1}: ${invFinalUnidades.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${mp.unidad} × ${costFmt} = ${valFmt}</div>`;
+function recolectarParametrosExtra() {
+    const extra = {};
+    CAMPOS_EXTRA.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) extra[id] = el.value;
+    });
+    extra['redondear-precio'] = document.getElementById('redondear-precio')?.checked || false;
+    extra.productos = [];
+    document.querySelectorAll('#productos-container .producto-item').forEach(fila => {
+        const nombre = fila.querySelector('.prod-nombre').value;
+        const unidades = fila.querySelector('.prod-unidades').value;
+        if (nombre && unidades) {
+            extra.productos.push({ nombre, unidades, precio: fila.querySelector('.prod-precio').value, costo: fila.querySelector('.prod-costo').value });
         }
-        html_mp += '</div>';
-    }
-    html_mp += '<div class="font-bold text-lg text-indigo-600 mt-4">Total Valuación MP:</div>';
-    for (let año = 0; año < 5; año++) {
-        const totalFmt = totalValuacionMP[año].toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html_mp += `<div class="flex justify-between text-lg"><span>Año ${año + 1}:</span><span class="font-bold">${totalFmt}</span></div>`;
-    }
-    html_mp += '</div>';
-    document.getElementById('valuacion-mp').innerHTML = html_mp;
-
-    html_pt += '<div class="font-bold text-lg text-green-600 mt-4">Total Valuación PT:</div>';
-    for (let año = 0; año < 5; año++) {
-        const invFinalUnidades = parseFloat(document.getElementById(`inv-final-${año + 1}`).value) || 0;
-        const costoUnitario = globalData.costoUnitarioProduccion[año] || 0;
-        const valorInventario = invFinalUnidades * costoUnitario;
-
-        const valFmt = valorInventario.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        const costFmt = costoUnitario.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-        html_pt += `<div class="flex justify-between text-lg border-b pb-2"><span>Año ${año + 1}:</span><span class="font-bold">${valFmt}</span></div>`;
-        html_pt += `<div class="text-sm text-gray-600">${invFinalUnidades.toLocaleString('es-MX')} unidades × ${costFmt} c/u</div>`;
-    }
-    html_pt += '</div>';
-    document.getElementById('valuacion-pt').innerHTML = html_pt;
+    });
+    extra.tipos_gasto_admin = [];
+    document.querySelectorAll('#gastos-admin-container .gasto-admin-item').forEach(fila => {
+        const concepto = fila.querySelector('.gasto-admin-concepto').value;
+        const monto = fila.querySelector('.gasto-admin-monto').value;
+        if (concepto && monto) extra.tipos_gasto_admin.push(fila.querySelector('.gasto-admin-tipo').value);
+    });
+    return extra;
 }
 
-// PESTAÑA 14: ESTADO DE RESULTADOS
-function calcularEstadoResultados() {
-    let html = '<div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="table-header"><tr><th class="px-3 py-2">Concepto</th>';
-    for (let año = 1; año <= 5; año++) { html += `<th class="px-3 py-2">Año ${año}</th>`; }
-    html += '</tr></thead><tbody>';
-
-    html += '<tr class="table-row bg-green-50"><td class="px-3 py-2 font-bold">INGRESOS</td>';
-    for (let año = 0; año < 5; año++) {
-        const ingFmt = (globalData.ventasProyeccion[año] || 0).toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<td class="px-3 py-2 font-semibold text-green-600">${ingFmt}</td>`;
+function aplicarParametrosExtra(extra) {
+    if (!extra) return;
+    if (typeof extra === 'string') {
+        try { extra = JSON.parse(extra); } catch (e) { return; }
     }
-    html += '</tr>';
-
-    html += '<tr class="table-row"><td class="px-3 py-2">(-) Costo de lo Vendido</td>';
-    for (let año = 0; año < 5; año++) {
-        const costFmt = (globalData.costoVendido[año] || 0).toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<td class="px-3 py-2 text-red-600">${costFmt}</td>`;
+    CAMPOS_EXTRA.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && extra[id] !== undefined && extra[id] !== null) el.value = extra[id];
+    });
+    const chk = document.getElementById('redondear-precio');
+    if (chk) chk.checked = !!extra['redondear-precio'];
+    const cont = document.getElementById('productos-container');
+    if (cont) {
+        cont.innerHTML = '';
+        (extra.productos || []).forEach(p => agregarProducto(p));
+        if (!cont.children.length) agregarProducto();
     }
-    html += '</tr>';
-
-    html += '<tr class="table-row bg-blue-50"><td class="px-3 py-2 font-bold">UTILIDAD BRUTA</td>';
-    let utilidadBruta = [];
-    for (let año = 0; año < 5; año++) {
-        const ub = (globalData.ventasProyeccion[año] || 0) - (globalData.costoVendido[año] || 0);
-        utilidadBruta[año] = ub;
-        const ubFmt = ub.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<td class="px-3 py-2 font-semibold">${ubFmt}</td>`;
-    }
-    html += '</tr>';
-
-    // ... (Resto de ERI simplificado con formato) ...
-    // Gastos Operacion
-    html += '<tr class="table-row"><td class="px-3 py-2">(-) Gastos de Operación</td>';
-    for (let a = 0; a < 5; a++) {
-        const gastoFmt = (globalData.gastosOperacion[a] || 0).toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<td class="px-3 py-2 text-red-600">${gastoFmt}</td>`;
-    }
-    html += '</tr>';
-
-    // Depreciacion
-    html += '<tr class="table-row"><td class="px-3 py-2">(-) Depreciación</td>';
-    for (let a = 0; a < 5; a++) {
-        const depFmt = (globalData.depreciacion[a] || 0).toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-        html += `<td class="px-3 py-2 text-red-600">${depFmt}</td>`;
-    }
-    html += '</tr>';
-
-    // U. Operacion
-    html += '<tr class="table-row bg-yellow-50"><td class="px-3 py-2 font-bold">UTILIDAD DE OPERACIÓN</td>';
-    let utilidadOperacion = [];
-    for (let a = 0; a < 5; a++) {
-        const uo = utilidadBruta[a] - (globalData.gastosOperacion[a] || 0) - (globalData.depreciacion[a] || 0);
-        utilidadOperacion[a] = uo;
-        html += `<td class="px-3 py-2 font-semibold">${uo.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr>';
-
-    // ISR
-    html += '<tr class="table-row"><td class="px-3 py-2">(-) ISR (30%)</td>';
-    for (let a = 0; a < 5; a++) {
-        const isr = Math.max(0, utilidadOperacion[a] * 0.30);
-        html += `<td class="px-3 py-2 text-red-600">${isr.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr>';
-
-    // U. Neta
-    html += '<tr class="table-row bg-green-100"><td class="px-3 py-2 font-bold">UTILIDAD NETA</td>';
-    for (let a = 0; a < 5; a++) {
-        const isr = Math.max(0, utilidadOperacion[a] * 0.30);
-        const un = utilidadOperacion[a] - isr;
-        globalData.utilidadNeta[a] = un;
-        const colorClass = un >= 0 ? 'text-green-700' : 'text-red-700';
-        html += `<td class="px-3 py-2 font-bold ${colorClass}">${un.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr></tbody></table></div>';
-    document.getElementById('estado-resultados').innerHTML = html;
-    calcularEstadoSituacion();
-}
-
-// PESTAÑA 15: BALANCE
-function calcularEstadoSituacion() {
-    const inversionInicial = parseFloat(document.getElementById('inversion-inicial').value) || 0;
-    let html = '<div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="table-header"><tr><th class="px-3 py-2">Concepto</th>';
-    for (let año = 1; año <= 5; año++) { html += `<th class="px-3 py-2">Año ${año}</th>`; }
-    html += '</tr></thead><tbody>';
-
-    // Helper para celdas
-    const row = (label, data) => {
-        let r = `<tr class="table-row"><td class="px-3 py-2">${label}</td>`;
-        data.forEach(v => r += `<td class="px-3 py-2">${v.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`);
-        return r + '</tr>';
-    };
-
-    // Calcular arrays
-    const efectivo = globalData.utilidadNeta.map(u => u * 0.3);
-    const cxc = globalData.ventasProyeccion.map(v => v * (globalData.diasCredito.ventas / 360));
-
-    const activoFijo = [];
-    let totalInversion = globalData.inversionesActivo.reduce((s, i) => s + i.monto, 0);
-    let depAcum = 0;
-    for (let a = 0; a < 5; a++) {
-        depAcum += (globalData.depreciacion[a] || 0);
-        activoFijo.push(Math.max(0, totalInversion - depAcum));
-    }
-
-    const cxp = globalData.comprasMP.map(c => c * (globalData.diasCredito.compras / 360));
-    const capSocial = Array(5).fill(inversionInicial);
-
-    let utilAcum = 0;
-    const utilRetenida = [];
-    for (let a = 0; a < 5; a++) {
-        utilAcum += (globalData.utilidadNeta[a] || 0);
-        utilRetenida.push(utilAcum);
-    }
-
-    html += '<tr class="bg-blue-100"><td colspan="6" class="px-3 py-2 font-bold">ACTIVOS</td></tr>';
-    html += row('Efectivo', efectivo);
-    html += row('Cuentas por Cobrar', cxc);
-    html += row('Activo Fijo Neto', activoFijo);
-
-    html += '<tr class="bg-red-100"><td colspan="6" class="px-3 py-2 font-bold">PASIVOS</td></tr>';
-    html += row('Cuentas por Pagar', cxp);
-
-    html += '<tr class="bg-green-100"><td colspan="6" class="px-3 py-2 font-bold">CAPITAL CONTABLE</td></tr>';
-    html += row('Capital Social', capSocial);
-    html += row('Utilidades Retenidas', utilRetenida);
-
-    html += '</tbody></table></div>';
-    document.getElementById('estado-situacion').innerHTML = html;
-}
-
-// PESTAÑA 16: FLUJO EFECTIVO
-function calcularFlujoEfectivo() {
-    const inversionInicial = parseFloat(document.getElementById('inversion-inicial').value) || 0;
-    const saldoInicial = parseFloat(document.getElementById('saldo-inicial').value) || 0;
-    const pctCobroEfectivo = parseFloat(document.getElementById('pct-cobro-efectivo').value) || 80;
-
-    let html = '<div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="table-header"><tr><th class="px-3 py-2">Concepto</th>';
-    for (let año = 1; año <= 5; año++) { html += `<th class="px-3 py-2">Año ${año}</th>`; }
-    html += '</tr></thead><tbody>';
-
-    html += '<tr class="table-row"><td class="px-3 py-2 font-semibold">INGRESOS</td>';
-    let ingresosPorAño = [];
-    for (let año = 0; año < 5; año++) {
-        const ventasEfectivo = (globalData.ventasProyeccion[año] || 0) * (pctCobroEfectivo / 100);
-        ingresosPorAño[año] = ventasEfectivo;
-        html += `<td class="px-3 py-2 text-green-600 font-semibold">${ventasEfectivo.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr>';
-
-    html += '<tr class="table-row"><td class="px-3 py-2 font-semibold">EGRESOS</td>';
-    let egresosPorAño = [];
-    for (let año = 0; año < 5; año++) {
-        const egresos = (globalData.comprasMP[año] || 0) +
-            (globalData.costoMO[año] || 0) +
-            (globalData.gastosIndirectos[año] || 0) +
-            (globalData.gastosOperacion[año] || 0);
-        egresosPorAño[año] = egresos;
-        html += `<td class="px-3 py-2 text-red-600 font-semibold">${egresos.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr>';
-
-    // ... (Flujo neto, saldo inicial, final siguen lógica similar) ...
-    // Por brevedad, usaremos el formato estándar en el resto de la tabla
-    html += '<tr class="table-row bg-blue-50"><td class="px-3 py-2 font-bold">FLUJO NETO</td>';
-    let flujoNeto = [];
-    for (let a = 0; a < 5; a++) {
-        const f = ingresosPorAño[a] - egresosPorAño[a];
-        flujoNeto[a] = f;
-        html += `<td class="px-3 py-2 font-bold ${f >= 0 ? 'text-green-700' : 'text-red-700'}">${f.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr>';
-
-    html += '<tr class="table-row"><td class="px-3 py-2">Saldo Inicial</td>';
-    let saldoAnterior = saldoInicial - inversionInicial;
-    for (let a = 0; a < 5; a++) {
-        html += `<td class="px-3 py-2">${saldoAnterior.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-        saldoAnterior += flujoNeto[a];
-    }
-    html += '</tr>';
-
-    html += '<tr class="table-row bg-yellow-50"><td class="px-3 py-2 font-bold">SALDO FINAL</td>';
-    saldoAnterior = saldoInicial - inversionInicial;
-    for (let a = 0; a < 5; a++) {
-        saldoAnterior += flujoNeto[a];
-        html += `<td class="px-3 py-2 font-bold ${saldoAnterior >= 0 ? 'text-green-700' : 'text-red-700'}">${saldoAnterior.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual })}</td>`;
-    }
-    html += '</tr></tbody></table></div>';
-
-    document.getElementById('flujo-efectivo-resultado').innerHTML = html;
-    generarResumenEjecutivo();
-}
-
-function generarResumenEjecutivo() {
-    const inversionInicial = parseFloat(document.getElementById('inversion-inicial').value) || 0;
-    const ventasTotal = (globalData.ventasProyeccion || []).reduce((a, b) => a + b, 0);
-    const utilidadBruta5Años = (globalData.ventasProyeccion || []).reduce((total, venta, index) => {
-        return total + venta - (globalData.costoVendido[index] || 0);
-    }, 0);
-
-    const utilidadNeta5Años = (globalData.utilidadNeta || []).reduce((a, b) => a + b, 0);
-
-    const margenPromedio = ventasTotal > 0 ? (utilidadBruta5Años / ventasTotal * 100) : 0;
-    const roiProyectado = inversionInicial > 0 ? (utilidadNeta5Años / inversionInicial * 100) : 0;
-
-    // Formateadores
-    const fmt = (v) => v.toLocaleString(culturaActual, { style: 'currency', currency: monedaActual });
-
-    let html = `
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-green-100 p-3 rounded-lg text-center">
-                <div class="text-2xl font-bold text-green-700">${fmt(ventasTotal)}</div>
-                <div class="text-sm text-green-600">Ingresos Totales (5 años)</div>
-            </div>
-            <div class="bg-blue-100 p-3 rounded-lg text-center">
-                <div class="text-2xl font-bold text-blue-700">${fmt(utilidadNeta5Años)}</div>
-                <div class="text-sm text-blue-600">Utilidad Neta (5 años)</div>
-            </div>
-            <div class="bg-purple-100 p-3 rounded-lg text-center">
-                <div class="text-2xl font-bold text-purple-700">${margenPromedio.toFixed(1)}%</div>
-                <div class="text-sm text-purple-purple-600">Margen Bruto Promedio</div>
-            </div>
-            <div class="bg-yellow-100 p-3 rounded-lg text-center">
-                <div class="text-2xl font-bold text-yellow-700">${roiProyectado.toFixed(1)}%</div>
-                <div class="text-sm text-yellow-600">ROI Proyectado</div>
-            </div>
-        </div>
-        <div class="mt-4 text-sm text-gray-600">
-            <p><strong>Punto de Equilibrio:</strong> Se alcanza cuando los ingresos igualan los costos totales.</p>
-            <p><strong>Recomendación:</strong> ${margenPromedio > 20 ? 'Proyecto viable con buen margen de rentabilidad.' : 'Revisar costos para mejorar rentabilidad.'}</p>
-            <p><strong>Análisis de Penetración:</strong> Año 1: ${(globalData.penetracionMercado[0] || 0).toFixed(1)}% → Año 5: ${(globalData.penetracionMercado[4] || 0).toFixed(1)}%</p>
-        </div>
-    `;
-
-    document.getElementById('resumen-ejecutivo').innerHTML = html;
 }
 
 // ===========================
@@ -1129,6 +1360,16 @@ function nuevoProyecto() {
     document.getElementById('costos-mp-container').innerHTML = '';
     document.getElementById('gastos-admin-container').innerHTML = '';
     document.getElementById('gastos-ventas-container').innerHTML = '';
+    document.getElementById('gastos-fijos-container').innerHTML = '';
+    document.getElementById('gastos-variables-container').innerHTML = '';
+    document.getElementById('productos-container').innerHTML = '';
+    const metodoVpn = document.getElementById('metodo-vpn');
+    if (metodoVpn) metodoVpn.value = 'proyecto';
+    _firmaMP = null;
+    const chkPrecio = document.getElementById('redondear-precio');
+    if (chkPrecio) chkPrecio.checked = false;
+    const tipoTiempo = document.getElementById('tiempo-unidad-tipo');
+    if (tipoTiempo) tipoTiempo.value = 'hr';
 
     // Recalcula todo para limpiar los resultados
     Object.keys(globalData).forEach(k => {
@@ -1148,16 +1389,10 @@ function nuevoProyecto() {
     agregarGastoVentas();
     agregarGastoFijo();
     agregarGastoVariable();
+    agregarProducto();
 
     // Llama a las funciones principales para limpiar los paneles de resultados
-    calcularPlan();
-    calcularFactSensibil();
-    calcularPptoVtas();
-    calcularInversiones();
-    calcularGastosOperacion();
-    calcularFlujoEfectivo();
-
-    verificarCompletitudSecciones();
+    recalcularTodo();
 
     console.log('Formulario limpiado.');
 }
@@ -1196,7 +1431,6 @@ function guardarProyecto() {
         dias_credito_compras: document.getElementById('dias-credito-compras').value,
         descuento_pronto_pago: document.getElementById('descuento-pronto-pago').value,
         inv_inicial_prod: document.getElementById('inv-inicial-prod').value,
-        inv_inicial_pt: document.getElementById('inv-inicial-pt').value,
         inv_final_a1: document.getElementById('inv-final-1').value,
         inv_final_a2: document.getElementById('inv-final-2').value,
         inv_final_a3: document.getElementById('inv-final-3').value,
@@ -1208,8 +1442,9 @@ function guardarProyecto() {
         costo_hora_mo: document.getElementById('costo-hora').value,
         inversion_inicial: document.getElementById('inversion-inicial').value,
         saldo_inicial: document.getElementById('saldo-inicial').value,
-        pct_cobro_efectivo: document.getElementById('pct-cobro-efectivo').value,
-        inflacion_anual: document.getElementById('inflacion-anual').value
+        inflacion_anual: document.getElementById('inflacion-anual').value,
+        // Campos nuevos (crédito, ISR/PTU, WACC, etc.) van juntos en una columna JSON
+        parametros_extra: JSON.stringify(recolectarParametrosExtra())
     };
 
     // PARTE 2: Recolecta todas las listas dinámicas
@@ -1428,7 +1663,6 @@ function cargarProyecto(id) {
 
             // Pestaña 6
             document.getElementById('inv-inicial-prod').value = datos.inv_inicial_prod;
-            document.getElementById('inv-inicial-pt').value = datos.inv_inicial_pt;
             document.getElementById('inv-final-1').value = datos.inv_final_a1;
             document.getElementById('inv-final-2').value = datos.inv_final_a2;
             document.getElementById('inv-final-3').value = datos.inv_final_a3;
@@ -1444,8 +1678,12 @@ function cargarProyecto(id) {
             document.getElementById('costo-hora').value = datos.costo_hora_mo;
             document.getElementById('inversion-inicial').value = datos.inversion_inicial;
             document.getElementById('saldo-inicial').value = datos.saldo_inicial;
-            document.getElementById('pct-cobro-efectivo').value = datos.pct_cobro_efectivo;
             document.getElementById('inflacion-anual').value = datos.inflacion_anual;
+
+            // Campos nuevos guardados en JSON
+            let extra = {};
+            try { extra = typeof datos.parametros_extra === 'string' ? JSON.parse(datos.parametros_extra) : (datos.parametros_extra || {}); } catch (e) { extra = {}; }
+            aplicarParametrosExtra(extra);
 
             // === RELLENAR TODAS LAS LISTAS DINÁMICAS ===
             document.getElementById('inversiones-container').innerHTML = ''; // Limpia el default
@@ -1464,7 +1702,8 @@ function cargarProyecto(id) {
 
             document.getElementById('gastos-admin-container').innerHTML = ''; // Limpia el default
             if (datos.gastos_admin && datos.gastos_admin.length > 0) {
-                datos.gastos_admin.forEach(gasto => agregarGastoAdmin(gasto));
+                const tipos = extra.tipos_gasto_admin || [];
+                datos.gastos_admin.forEach((gasto, idx) => agregarGastoAdmin({ ...gasto, tipo: tipos[idx] }));
             } else {
                 agregarGastoAdmin(); // Agrega una fila vacía
             }
@@ -1495,32 +1734,9 @@ function cargarProyecto(id) {
             // === ¡LA SOLUCIÓN! RECALCULAR TODO DESPUÉS DE CARGAR ===
             // ======================================================
 
-            // Pestaña 1
-            calcularPlan();
-
-            // Pestaña 2
-            calcularFactSensibil();
-
-            // Pestaña 3 (Esto llama en cadena a Producción, MTP, MO, CostoVendido y ERI)
-            calcularPptoVtas();
-
-            // Pestaña 5
-            calcularInversiones();
-
-            // Pestaña 8 (Costos de MP)
-            // 1. Actualiza los costos unitarios con los datos cargados
+            // Recalcula todo con los datos cargados (incluye los costos de MP guardados)
+            _firmaMP = null;
             actualizarCostosMP(datos.materias_primas);
-            // 2. Vuelve a correr el cálculo de compras con esos costos
-            calcularComprasMP();
-
-            // Pestaña 11
-            calcularGastosIndirectos(); // (Asegúrate de tener esta función si existe)
-
-            // Pestaña 13
-            calcularGastosOperacion();
-
-            // Pestaña 16 (Esta llama a Resumen Ejecutivo)
-            calcularFlujoEfectivo();
 
             verificarCompletitudSecciones();
             mostrarToast(`Proyecto "${datos.nombre_proyecto}" cargado correctamente.`, 'success');
@@ -1609,6 +1825,17 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('poblacion-ocupada').addEventListener('change', calcularPlan);
     document.getElementById('concentracion-mercado').addEventListener('change', calcularPlan);
 
+    ['inversiones-container', 'receta-container', 'gastos-admin-container', 'gastos-ventas-container', 'gastos-fijos-container', 'gastos-variables-container', 'productos-container']
+        .forEach(id => { const c = document.getElementById(id); if (c) c.innerHTML = ''; });
+    agregarInversion();
+    agregarMateriaPrima();
+    agregarGastoAdmin();
+    agregarGastoVentas();
+    agregarGastoFijo();
+    agregarGastoVariable();
+    agregarProducto();
+    recalcularTodo();
+
     console.log('Sistema de Análisis Financiero v3.0 FINAL Cargado y Limpio');
 });
 
@@ -1662,7 +1889,7 @@ function iniciarSocket() {
             // 3. NUEVA LÓGICA: ACTUALIZAR INFLACIÓN AUTOMÁTICAMENTE
             if (datos.inflacion) {
                 const inputInflacion = document.getElementById('inflacion-anual');
-                if (inputInflacion) {
+                if (inputInflacion && inputInflacion.value === '') {
                     // Ponemos el valor nuevo en la casilla
                     inputInflacion.value = datos.inflacion;
 
@@ -1707,7 +1934,11 @@ function realizarConversion(factor) {
         '.costo-mp',            // Costos materia prima
         '.gasto-fijo-monto',    // Gastos fijos
         '.gasto-var-unidad',    // Gastos variables
-        '.gasto-admin-monto'    // Gastos administrativos
+        '.gasto-admin-monto',   // Gastos administrativos
+        '#inv-inicial-pt',      // Costo unitario del inventario inicial de PT
+        '#inv-capital-trabajo', // Inventario de capital de trabajo
+        '.prod-precio',         // Precios de productos
+        '.prod-costo'           // Costos de productos
     ];
 
     // 2. Convertimos los valores matemáticamente
@@ -1721,18 +1952,8 @@ function realizarConversion(factor) {
         });
     });
 
-    // 3. ¡IMPORTANTE! Forzamos el recálculo de TODAS las pestañas
-    // Esto hará que las tablas de resultados se vuelvan a dibujar con la nueva moneda
-    calcularComprasMP();
-    calcularPlan();
-    calcularFactSensibil();
-    calcularPptoVtas();        // Actualiza Ingresos
-    calcularInversiones();
-    calcularGastosIndirectos();
-    calcularGastosOperacion();
-    calcularCondicionesComerciales(); // Actualiza Condiciones
-    calcularCostoProduccion(); // Actualiza Costos
-    calcularFlujoEfectivo();   // Actualiza Flujo y Balance
+    // 3. Recalculamos todo con la nueva moneda
+    recalcularTodo();
 }
 // ===========================
 // FUNCIONES AUXILIARES (FALTANTES)
@@ -1833,7 +2054,7 @@ function mostrarGraficos() {
                 },
                 {
                     label: 'Costo Total',
-                    data: globalData.costoProduccion.map((c, i) => c + (globalData.gastosOperacion[i] || 0)),
+                    data: globalData.costoVendido.map((c, i) => c + (globalData.gastosOperacion[i] || 0) + (globalData.depreciacion[i] || 0)),
                     backgroundColor: 'rgba(239, 68, 68, 0.6)', // Rojo
                     borderColor: 'rgba(239, 68, 68, 1)',
                     borderWidth: 1
@@ -1845,12 +2066,10 @@ function mostrarGraficos() {
 
     // 2. Gráfico de Línea: Flujo de Efectivo Acumulado
     // Calculamos el acumulado
-    let acumulado = -parseFloat(document.getElementById('inversion-inicial').value || 0);
+    let acumulado = -(globalData.inversionTotal || 0);
     const datosFlujo = [];
     for (let i = 0; i < 5; i++) {
-        // Flujo neto aprox = Utilidad Neta + Depreciación (simplificado)
-        const flujoAnual = (globalData.utilidadNeta[i] || 0) + (globalData.depreciacion[i] || 0);
-        acumulado += flujoAnual;
+        acumulado += (globalData.flujoProyecto && globalData.flujoProyecto[i]) || 0;
         datosFlujo.push(acumulado);
     }
 
@@ -1862,7 +2081,7 @@ function mostrarGraficos() {
             datasets: [{
                 label: 'Dinero en Caja (Acumulado)',
                 // Agregamos el punto inicial negativo
-                data: [-parseFloat(document.getElementById('inversion-inicial').value || 0), ...datosFlujo],
+                data: [-(globalData.inversionTotal || 0), ...datosFlujo],
                 borderColor: '#6366f1', // Indigo
                 backgroundColor: 'rgba(99, 102, 241, 0.2)',
                 fill: true,
@@ -1888,7 +2107,7 @@ function mostrarGraficos() {
     });
 
     // 3. Gráfico de Pastel: Estructura de Costos (Año 1)
-    const mp = globalData.comprasMP[0] || 0;
+    const mp = (globalData.mpUtilizada && globalData.mpUtilizada[0]) || 0;
     const mo = globalData.costoMO[0] || 0;
     const ind = globalData.gastosIndirectos[0] || 0;
     const op = globalData.gastosOperacion[0] || 0;

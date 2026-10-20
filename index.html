@@ -223,6 +223,8 @@
                 <button data-tab="estado-situacion-tab" class="nav-button"
                     onclick="showTab('estado-situacion-tab')"><span class="nav-number">16</span><span
                         class="nav-label">Balance</span></button>
+                <button data-tab="evaluacion" class="nav-button" onclick="showTab('evaluacion')"><span
+                        class="nav-number">17</span><span class="nav-label">Evaluación</span></button>
             </div>
         </nav>
 
@@ -264,25 +266,25 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Porcentaje de Mujeres
                                     (%)</label>
-                                <input type="number" id="porcentaje-mujeres" class="w-full" placeholder="Ej: 51"
+                                <input type="number" id="porcentaje-mujeres" data-opcional class="w-full" placeholder="Ej: 51"
                                     step="0.1" onchange="calcularPlan()">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Rango de Edad del Mercado
                                     Meta (%)</label>
-                                <input type="number" id="rango-edad" class="w-full" placeholder="Ej: 35" step="0.1"
+                                <input type="number" id="rango-edad" data-opcional class="w-full" placeholder="Ej: 35" step="0.1"
                                     onchange="calcularPlan()">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Población Ocupada
                                     (%)</label>
-                                <input type="number" id="poblacion-ocupada" class="w-full" placeholder="Ej: 65"
+                                <input type="number" id="poblacion-ocupada" data-opcional class="w-full" placeholder="Ej: 65"
                                     step="0.1" onchange="calcularPlan()">
                             </div>
                             <div class="bg-yellow-50 p-3 rounded">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">🎯 Concentración de Mercado
                                     (%)</label>
-                                <input type="number" id="concentracion-mercado" class="w-full" placeholder="Ej: 80"
+                                <input type="number" id="concentracion-mercado" data-opcional class="w-full" placeholder="Ej: 80"
                                     step="0.1" onchange="calcularPlan()">
                                 <p class="text-xs text-gray-500 mt-1">Porcentaje del mercado donde concentrará
                                     operaciones</p>
@@ -301,6 +303,7 @@
                                 </div>
                                 <div class="mt-4 text-xs text-gray-500">
                                     <p>Fórmula: Población × % Mujeres × % Rango Edad × % Ocupada × % Concentración</p>
+                                    <p class="mt-1">Si dejas un % vacío se toma como 100% (sirve para capturar el mercado meta directo en "Población Total").</p>
                                 </div>
                             </div>
                         </div>
@@ -317,7 +320,7 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Participación de Mercado
                                     (%)</label>
-                                <input type="number" id="participacion-mercado" class="w-full" placeholder="Ej: 5"
+                                <input type="number" id="participacion-mercado" data-opcional class="w-full" placeholder="Ej: 5"
                                     step="0.1" onchange="calcularFactSensibil()">
                             </div>
                             <div>
@@ -329,7 +332,7 @@
                             <div class="bg-blue-50 p-3 rounded">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">📈 Incremento Anual en
                                     Unidades por Vender (%)</label>
-                                <input type="number" id="incremento-producto" class="w-full" placeholder="Ej: 3"
+                                <input type="number" id="incremento-producto" data-opcional class="w-full" placeholder="Ej: 3"
                                     step="0.1" onchange="calcularFactSensibil()">
                             </div>
                             <div class="bg-green-50 p-3 rounded">
@@ -340,9 +343,14 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Incremento Anual de
-                                    Penetración (puntos %)</label>
-                                <input type="number" id="incremento-penetracion" class="w-full" placeholder="Ej: 2"
-                                    step="0.1" onchange="calcularFactSensibil()">
+                                    Penetración (%)</label>
+                                <input type="number" id="incremento-penetracion" class="w-full" placeholder="Ej: 4 (15% → 15.6%)"
+                                    step="any" onchange="calcularFactSensibil()">
+                            </div>
+                            <div class="bg-indigo-50 p-3 rounded">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">🛒 Usos / compras mensuales por cliente</label>
+                                <input type="number" id="usos-mensuales" class="w-full" placeholder="Ej: 4" step="any" data-opcional onchange="recalcularTodo()">
+                                <p class="text-xs text-gray-500 mt-1">Si lo llenas, las unidades a vender se calculan solas: clientes × usos × 12 (redondeado hacia arriba).</p>
                             </div>
                         </div>
                         <div class="result-box p-4 rounded-lg">
@@ -364,13 +372,23 @@
                             <div class="bg-yellow-50 p-4 rounded">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">💰 Precio Unitario Base
                                     ($)</label>
-                                <input type="number" id="precio-unitario-base" class="w-full" placeholder="Ej: 25.50"
+                                <input type="number" id="precio-unitario-base" data-opcional class="w-full" placeholder="Ej: 25.50"
                                     step="0.01" onchange="calcularPptoVtas()">
                                 <label class="block text-sm font-medium text-gray-700 mb-2 mt-3">📊 Incremento Anual de
                                     Precio (%)</label>
                                 <input type="number" id="incremento-precio" class="w-full"
                                     placeholder="Ej: 4 (inflación)" step="0.1" onchange="calcularPptoVtas()">
                                 <p class="text-xs text-gray-500 mt-2">El precio se ajustará automáticamente cada año</p>
+                                <label class="flex items-center gap-2 mt-2 text-sm text-gray-700"><input type="checkbox" id="redondear-precio" onchange="recalcularTodo()"> Redondear el precio hacia arriba cada año (como el Excel: 30 → 32 → 34…)</label>
+                            </div>
+                            <div class="bg-orange-50 p-4 rounded">
+                                <h4 class="font-semibold text-gray-700 mb-1">🧀 Varios productos (compra-venta, opcional)</h4>
+                                <p class="text-xs text-gray-500 mb-2">Para empresas que compran y revenden varios productos. Si llenas esta tabla, se ignoran el precio base y las unidades de abajo.
+                                    Las unidades crecen con "Incremento Anual en Unidades por Vender" (pestaña 2), los precios con el incremento de precio de arriba y los costos con el "Incremento anual del costo de MP" (pestaña 6).</p>
+                                <div class="grid grid-cols-4 gap-2 mb-1 text-xs text-gray-600"><span>Producto</span><span>Unidades año 1</span><span>Precio de venta</span><span>Costo unitario</span></div>
+                                <div id="productos-container"></div>
+                                <button onclick="agregarProducto()"
+                                    class="mt-2 px-4 py-2 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600">+ Agregar Producto</button>
                             </div>
                             <div class="space-y-3">
                                 <h4 class="font-semibold text-gray-700">Unidades a Vender por Año</h4>
@@ -418,6 +436,11 @@
                                 <input type="number" id="inv-inicial-prod" class="w-full" placeholder="0"
                                     onchange="calcularPptoProd()">
                             </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-2">Días de inventario</label><input type="number" id="dias-inventario" class="w-full" placeholder="Ej: 2" step="any" data-opcional onchange="recalcularTodo()"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-2">Días laborables al año</label><input type="number" id="dias-laborables" class="w-full" placeholder="260" step="any" data-opcional onchange="recalcularTodo()"></div>
+                            </div>
+                            <p class="text-xs text-gray-500">Si llenas los días de inventario, el inventario final se calcula solo: ventas ÷ días laborables × días de inventario.</p>
                             <div class="space-y-3">
                                 <h4 class="font-semibold text-gray-700">Inventario Final Deseado (unidades)</h4>
                                 <div class="grid grid-cols-5 gap-2">
@@ -499,16 +522,21 @@
                                 <h4 class="font-semibold text-gray-700 mb-3">Inventarios de Materia Prima</h4>
                                 <div class="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label class="block text-sm text-gray-600 mb-1">Inv. Inicial de MP</label>
-                                        <input type="number" id="inv-inicial-mp" class="w-full text-sm" placeholder="0"
-                                            onchange="calcularComprasMP()">
+                                        <label class="block text-sm text-gray-600 mb-1">Inv. Inicial de cada MP (en sus unidades)</label>
+                                        <input type="number" id="inv-inicial-mp" data-opcional class="w-full text-sm" placeholder="0"
+                                            step="any" onchange="calcularComprasMP()">
                                     </div>
                                     <div>
                                         <label class="block text-sm text-gray-600 mb-1">Inv. Final de MP (%
                                             consumo)</label>
-                                        <input type="number" id="inv-final-mp-pct" class="w-full text-sm"
-                                            placeholder="10" step="0.1" onchange="calcularComprasMP()">
+                                        <input type="number" id="inv-final-mp-pct" data-opcional class="w-full text-sm"
+                                            placeholder="0" step="any" onchange="calcularComprasMP()">
                                     </div>
+                                </div>
+                                <div class="mt-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">📈 Incremento anual del costo de MP (%)</label>
+                                    <input type="number" id="inflacion-mp" class="w-full" placeholder="Ej: 5.198 (inflación promedio)" step="any" data-opcional onchange="recalcularTodo()">
+                                    <p class="text-xs text-gray-500 mt-1">El costo de cada MP sube este % cada año.</p>
                                 </div>
                             </div>
                         </div>
@@ -529,15 +557,29 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Tiempo por Unidad
-                                    (horas)</label>
-                                <input type="number" id="tiempo-unidad" class="w-full" placeholder="Ej: 0.5" step="0.01"
-                                    onchange="calcularPptoMO()">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Tiempo por Unidad</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="number" id="tiempo-unidad" class="w-full" placeholder="Ej: 4" step="any"
+                                        onchange="calcularPptoMO()">
+                                    <select id="tiempo-unidad-tipo" class="w-full" onchange="recalcularTodo()">
+                                        <option value="hr">horas</option>
+                                        <option value="min">minutos</option>
+                                    </select>
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Costo por Hora ($)</label>
-                                <input type="number" id="costo-hora" class="w-full" placeholder="Ej: 15.00" step="0.01"
+                                <input type="number" id="costo-hora" class="w-full" placeholder="Ej: 30.2925 (salario diario ÷ horas)" step="any"
                                     onchange="calcularPptoMO()">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Horas por jornada (opcional)</label>
+                                <input type="number" id="horas-jornada" class="w-full" placeholder="Ej: 8" step="any" data-opcional onchange="recalcularTodo()">
+                                <p class="text-xs text-gray-500 mt-1">Si lo llenas: trabajadores = horas ÷ días laborables ÷ jornada (redondeado hacia arriba) y se paga la jornada completa. Usa los días laborables de la pestaña 4.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Incremento salarial anual (%)</label>
+                                <input type="number" id="incremento-salarial" class="w-full" placeholder="Ej: 20.997" step="any" data-opcional onchange="recalcularTodo()">
                             </div>
                         </div>
                         <div class="result-box p-4 rounded-lg">
@@ -586,8 +628,9 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Inflación Anual (%)</label>
-                                <input type="number" id="inflacion-anual" class="w-full bg-gray-100"
-                                    placeholder="Automático..." step="0.1" READONLY>
+                                <input type="number" id="inflacion-anual" class="w-full"
+                                    placeholder="Ej: 5.198" step="any" onchange="recalcularTodo()">
+                                <p class="text-xs text-gray-500 mt-1">Se usa en gastos indirectos y gastos de operación. Si la dejas vacía se llena con el valor del servidor.</p>
                             </div>
                         </div>
                         <div class="result-box p-4 rounded-lg">
@@ -675,6 +718,11 @@
                                     class="mt-2 px-4 py-2 bg-orange-500 text-white rounded-md text-sm hover:bg-orange-600">+
                                     Agregar Gasto Ventas</button>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Carga social (% sobre sueldos + MOD)</label>
+                                <input type="number" id="pct-carga-social" class="w-full" placeholder="Ej: 32" step="any" data-opcional onchange="recalcularTodo()">
+                                <p class="text-xs text-gray-500 mt-1">La depreciación ya no se captura aquí: sale de la pestaña 9.</p>
+                            </div>
                         </div>
                         <div class="result-box p-4 rounded-lg">
                             <h3 class="text-lg font-semibold text-gray-800 mb-3">Gastos de Operación Totales</h3>
@@ -714,7 +762,7 @@
                                 <h4 class="font-semibold text-gray-700 mb-3">💰 Descuentos</h4>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Descuento por Pronto Pago
                                     (%)</label>
-                                <input type="number" id="descuento-pronto-pago" class="w-full" placeholder="Ej: 2"
+                                <input type="number" id="descuento-pronto-pago" data-opcional class="w-full" placeholder="Ej: 2"
                                     step="0.1" onchange="calcularCondicionesComerciales()">
                                 <p class="text-xs text-gray-500 mt-1">Descuento si paga antes de tiempo a proveedores
                                 </p>
@@ -752,10 +800,11 @@
                         <div class="bg-gray-50 p-4 rounded-lg">
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Inv. Inicial Producto
-                                        Terminado</label>
-                                    <input type="number" id="inv-inicial-pt" class="w-full" placeholder="0" step="0.01"
-                                        onchange="calcularCostoProduccion()">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Costo unitario del inv.
+                                        inicial de PT ($/unidad, opcional)</label>
+                                    <input type="number" id="inv-inicial-pt" class="w-full" placeholder="Vacío = costo del año 1" step="any"
+                                        data-opcional onchange="calcularCostoProduccion()">
+                                    <p class="text-xs text-gray-500 mt-1">Las unidades del inventario inicial salen de la pestaña 4.</p>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-2">Costo Unitario PT (se
@@ -797,6 +846,10 @@
             <div id="estado-resultados-tab" class="tab-content">
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h2 class="text-2xl font-bold text-gray-800 mb-6">14. 📊 Estado de Resultados Integral (ERI)</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-2">ISR (%)</label><input type="number" id="tasa-isr" class="w-full" placeholder="30" step="any" data-opcional onchange="recalcularTodo()"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-2">PTU (%)</label><input type="number" id="tasa-ptu" class="w-full" placeholder="10" step="any" data-opcional onchange="recalcularTodo()"></div>
+                    </div>
                     <div class="result-box p-4 rounded-lg">
                         <div id="estado-resultados">
                             <p class="text-gray-500">Complete todos los presupuestos anteriores para generar el estado
@@ -811,8 +864,9 @@
                             <li>• Ingresos por ventas con precios variables</li>
                             <li>• Costo de lo vendido</li>
                             <li>• Gastos de operación</li>
-                            <li>• Depreciación y amortización</li>
-                            <li>• ISR (30%)</li>
+                            <li>• Depreciación</li>
+                            <li>• Gastos financieros (intereses del crédito)</li>
+                            <li>• ISR y PTU</li>
                             <li>• Utilidad neta después de impuestos</li>
                         </ul>
                     </div>
@@ -827,25 +881,29 @@
             <!-- PESTAÑA 15: Flujo Efectivo -->
             <div id="fe" class="tab-content">
                 <div class="bg-white rounded-lg shadow-lg p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-6">15. Flujo de Efectivo y Resumen</h2>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">15. Financiamiento, Flujo de Efectivo y Resumen</h2>
                     <div class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Inversión Inicial
-                                    ($)</label>
-                                <input type="number" id="inversion-inicial" class="w-full" placeholder="0" step="0.01"
-                                    onchange="calcularFlujoEfectivo(); calcularEstadoSituacion();">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Inversión total ($)
+                                    (activo fijo + capital de trabajo)</label>
+                                <input type="number" id="inversion-inicial" class="w-full" placeholder="Vacío = solo activo fijo" step="any"
+                                    data-opcional onchange="recalcularTodo()">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Saldo Inicial ($)</label>
-                                <input type="number" id="saldo-inicial" class="w-full" placeholder="0" step="0.01"
-                                    onchange="calcularFlujoEfectivo()">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Efectivo extra de los socios ($)</label>
+                                <input type="number" id="saldo-inicial" class="w-full" placeholder="0" step="any"
+                                    data-opcional onchange="recalcularTodo()">
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">% Cobro en Efectivo</label>
-                                <input type="number" id="pct-cobro-efectivo" class="w-full" placeholder="80" step="0.1"
-                                    onchange="calcularFlujoEfectivo()">
-                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-2">% financiado con crédito bancario</label><input type="number" id="pct-financiamiento" class="w-full" placeholder="Ej: 40" step="any" data-opcional onchange="recalcularTodo()"></div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-2">Tasa de interés anual del crédito (%)</label><input type="number" id="tasa-interes" class="w-full" placeholder="Ej: 19" step="any" data-opcional onchange="recalcularTodo()"></div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-2">Inventario inicial de capital de trabajo ($)</label><input type="number" id="inv-capital-trabajo" class="w-full" placeholder="0" step="any" data-opcional onchange="recalcularTodo()">
+                                <p class="text-xs text-gray-500 mt-1">Se compra con la inversión y se queda en el balance (ej. Lácteos: 60,000).</p></div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-2">Plazo del crédito (años, pagos mensuales)</label><input type="number" id="plazo-credito" class="w-full" placeholder="5" step="any" data-opcional onchange="recalcularTodo()"></div>
+                        </div>
+                        <div class="result-box p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Crédito bancario (tabla de amortización por año)</h3>
+                            <div id="tabla-amortizacion"><p>Captura el financiamiento para calcularlo</p></div>
                         </div>
                         <div class="result-box p-4 rounded-lg">
                             <h3 class="text-lg font-semibold text-gray-800 mb-3">Proyección de Flujo de Efectivo</h3>
@@ -882,10 +940,37 @@
                         <p class="text-sm text-gray-600">El Balance muestra la situación financiera incluyendo:</p>
                         <ul class="text-xs text-gray-600 mt-2 space-y-1 ml-4">
                             <li>• <strong>Activos:</strong> Efectivo, Cuentas por Cobrar, Inventarios, Activo Fijo</li>
-                            <li>• <strong>Pasivos:</strong> Cuentas por Pagar, Impuestos por Pagar</li>
-                            <li>• <strong>Capital:</strong> Inversión inicial y utilidades retenidas</li>
+                            <li>• <strong>Pasivos:</strong> Proveedores y crédito bancario</li>
+                            <li>• <strong>Capital:</strong> Capital social, resultados anteriores y resultado del ejercicio</li>
                         </ul>
                         <p class="text-xs text-gray-500 mt-2">Ecuación: Activos = Pasivos + Capital</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PESTAÑA 17 NUEVA: Evaluación del proyecto -->
+            <div id="evaluacion" class="tab-content">
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">17. Evaluación del Proyecto y Razones Financieras</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-2">Costo de capital de los socios, ke (%)</label><input type="number" id="tasa-ke" class="w-full" placeholder="Ej: 15" step="any" data-opcional onchange="recalcularTodo()">
+                            <p class="text-xs text-gray-500 mt-1">kd = tasa del crédito (pestaña 15) y t = ISR + PTU (pestaña 14).</p>
+                        </div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-2">Flujos para VPN, TIR, B/C y PRI</label>
+                            <select id="metodo-vpn" class="w-full" onchange="recalcularTodo()">
+                                <option value="proyecto">Flujo del proyecto (antes de pagar el crédito)</option>
+                                <option value="flujo-neto">Flujo neto del flujo de efectivo (después del crédito)</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">El ejercicio de Lácteos usa "flujo neto".</p>
+                        </div>
+                    </div>
+                    <div class="result-box p-4 rounded-lg mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-3">WACC, VPN, TIR, Beneficio/Costo y PRI</h3>
+                        <div id="evaluacion-resultado"><p>Se calculará con todos los datos anteriores</p></div>
+                    </div>
+                    <div class="result-box p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-3">Razones Financieras</h3>
+                        <div id="razones-resultado"><p>Se calculará con todos los datos anteriores</p></div>
                     </div>
                 </div>
             </div>
