@@ -75,16 +75,14 @@ class TipoCambioSocket implements MessageComponentInterface {
             // Configurar zona horaria para que la hora coincida con México
             date_default_timezone_set('America/Mexico_City');
             
-            // --- C. SIMULACIÓN DE VARIABLES ECONÓMICAS ---
-            // Generamos una inflación aleatoria para simular volatilidad del mercado en tiempo real.
-            $inflacionSimulada = rand(400, 550) / 100; // Entre 4.00% y 5.50%
+            // (Se quitó la inflación aleatoria: la inflación la captura el usuario
+            //  en la pestaña 8 para que los resultados sean reproducibles.)
 
             // 2. PREPARACIÓN DE LA RESPUESTA (JSON)
             // Empaquetamos todos los datos calculados para enviarlos de regreso.
             $respuesta = json_encode([
                 'tipo' => 'tipo_cambio_actualizado',
                 'valor' => $precio,                 // El precio del dólar/euro
-                'inflacion' => $inflacionSimulada,  // La inflación simulada
                 'moneda_base' => $monedaBase,       // Qué moneda es
                 'fecha' => date('H:i:s')            // La hora exacta del servidor
             ]);

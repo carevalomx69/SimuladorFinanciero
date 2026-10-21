@@ -1886,19 +1886,7 @@ function iniciarSocket() {
             const valor = document.getElementById('valor-dolar');
             if (valor) valor.innerText = `${precioFmt} MXN (Act: ${datos.fecha})`;
 
-            // 3. NUEVA LÓGICA: ACTUALIZAR INFLACIÓN AUTOMÁTICAMENTE
-            if (datos.inflacion) {
-                const inputInflacion = document.getElementById('inflacion-anual');
-                if (inputInflacion && inputInflacion.value === '') {
-                    // Ponemos el valor nuevo en la casilla
-                    inputInflacion.value = datos.inflacion;
-
-                    // Forzamos el recálculo de Gastos Indirectos para ver el efecto
-                    calcularGastosIndirectos();
-
-                    console.log("📉 Inflación actualizada a:", datos.inflacion + "%");
-                }
-            }
+            // (La inflación ya no se llena desde el servidor: la captura el usuario.)
         }
     };
 
