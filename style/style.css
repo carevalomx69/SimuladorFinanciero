@@ -18,14 +18,14 @@ input[type="number"],
 .tab-content h2 {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    color: #1C1B18;
+    color: #185C37;
     letter-spacing: -0.01em;
 }
 
 .tab-content h3 {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    color: #26241E;
+    color: #1F2A22;
 }
 
 /* ===================================================================
@@ -33,8 +33,8 @@ input[type="number"],
    =================================================================== */
 .tab-content>div:first-child,
 #lista-proyectos-card {
-    border: 1px solid #F1EDE2;
-    /* paper-200 */
+    border: 1px solid #D4D4D4;
+    /* gris de cuadrícula de Excel */
 }
 
 /* ===================================================================
@@ -67,8 +67,7 @@ input[type="number"],
    contables: cada sección es una "pestaña" con su número y nombre.
    =================================================================== */
 .index-nav {
-    border-right: 1px solid rgba(176, 141, 87, 0.25);
-    /* brass-500 @ 25% */
+    border-right: 1px solid #0E3D24;
 }
 
 .nav-button {
@@ -78,8 +77,8 @@ input[type="number"],
     text-align: left;
     padding: 0.85rem 1.25rem;
     background: transparent;
-    color: #B9C5D9;
-    /* indigo-200: texto tenue sobre fondo ink oscuro */
+    color: #E2EFDA;
+    /* verde muy claro sobre la barra verde oscuro */
     font-weight: 500;
     font-size: 0.875rem;
     white-space: nowrap;
@@ -92,8 +91,7 @@ input[type="number"],
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
     font-weight: 600;
-    color: #8F7040;
-    /* brass-600 */
+    color: #A9D08E;
     letter-spacing: 0.05em;
     min-width: 1.5rem;
     margin-right: 0.75rem;
@@ -101,22 +99,18 @@ input[type="number"],
 }
 
 .nav-button:hover:not(.active) {
-    background-color: rgba(250, 245, 234, 0.06);
-    /* brass-50 muy tenue */
-    color: #FAF8F3;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #FFFFFF;
 }
 
 .nav-button.active {
-    background-color: rgba(176, 141, 87, 0.14);
-    /* brass-500 tenue */
-    color: #FAF8F3;
-    border-left-color: #B08D57;
-    /* brass-500 */
+    background-color: rgba(255, 255, 255, 0.16);
+    color: #FFFFFF;
+    border-left-color: #A9D08E;
 }
 
 .nav-button.active .nav-number {
-    color: #D5B36A;
-    /* brass-300, más brillante cuando está activo */
+    color: #FFFFFF;
 }
 
 /* Se agrega cuando todos los campos de la sección tienen valor */
@@ -126,7 +120,7 @@ input[type="number"],
 
 .nav-button.nav-complete .nav-label::after {
     content: ' ✓';
-    color: #5A9C7A;
+    color: #C6E0B4;
     font-weight: 700;
 }
 
@@ -139,7 +133,7 @@ input[type="number"],
     }
 
     .nav-button.active {
-        border-bottom-color: #B08D57;
+        border-bottom-color: #A9D08E;
     }
 }
 
@@ -150,13 +144,12 @@ input[type="number"],
 input[type="text"],
 input[type="email"],
 input[type="password"] {
-    border: 1px solid #E6E0D0;
-    /* paper-300 */
-    border-radius: 0.5rem;
+    border: 1px solid #C8C6C4;
+    border-radius: 0.25rem;
     padding: 0.6rem 0.75rem;
     width: 100%;
     background-color: #FFFFFF;
-    color: #1C1B18;
+    color: #1F2A22;
     transition: all 0.2s;
 }
 
@@ -165,19 +158,17 @@ input[type="text"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus {
     outline: none;
-    border-color: #B08D57;
-    /* brass-500 */
-    box-shadow: 0 0 0 3px rgba(176, 141, 87, 0.2);
+    border-color: #217346;
+    /* verde Excel, como la celda seleccionada */
+    box-shadow: 0 0 0 2px rgba(33, 115, 70, 0.25);
 }
 
 /* ===================================================================
    CAJAS DE RESULTADOS
    =================================================================== */
 .result-box {
-    background: #FAF8F3;
-    /* paper-100 */
-    border-left: 4px solid #B08D57;
-    /* brass-500 */
+    background: #F7FBF5;
+    border-left: 4px solid #217346;
     padding: 1rem;
     border-radius: 0.5rem;
 }
@@ -191,24 +182,32 @@ input[type="password"]:focus {
    TABLAS
    =================================================================== */
 .table-header {
-    background: #1B2A4A;
-    /* indigo-600 (navy) */
+    background: #217346;
+    /* encabezado de tabla verde Excel */
     color: white;
 }
 
 .table-row:nth-child(even) {
-    background-color: #FAF8F3;
-    /* paper-100 */
+    background-color: #E2EFDA;
+    /* filas alternadas como tabla de Excel */
 }
 
 .table-row:hover {
-    background-color: #F1EDE2;
-    /* paper-200 */
+    background-color: #C6E0B4;
 }
 
 .table-row td,
 .table-header th {
     font-family: 'JetBrains Mono', monospace;
+}
+
+/* Líneas de cuadrícula como en una hoja de Excel */
+.table-row td {
+    border: 1px solid #D4D4D4;
+}
+
+.table-header th {
+    border: 1px solid #185C37;
 }
 
 /* ===================================================================

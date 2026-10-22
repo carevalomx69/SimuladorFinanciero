@@ -1,8 +1,9 @@
 // Caso SALCERA (salsa macha) — PROYECTO_EMPRESA_SALCERA_2023_FINAL_011123.xlsx
-// Diferencias conocidas por criterio (NO se comparan aquí, ver pruebas/README.md):
-//   - Gastos de operación: en el Excel el contador no lleva carga social.
-//   - Costo de lo vendido / utilidad: el Excel valúa un inventario final de MP que nunca se compró.
-//   - VPN y TIR: el Excel los calcula con saldos acumulados de efectivo.
+// Criterios de la maestra (22-oct-2026): inventario final de MP igual al contenido de MP del
+// inventario de PT (no se suma a compras), honorarios sin carga social, VPN/TIR con saldos
+// acumulados y la inversión en activos, pérdidas acumuladas para ISR.
+// Única diferencia con el Excel: el VPN. La celda del Excel que lo calcula usa un WACC de 6.27%
+// por un paréntesis mal puesto; el WACC correcto (celda de abajo) es 13.56%, que es el que usa la app.
 module.exports = {
     nombre: 'SALCERA',
     capturar({ set, check, filas, recalcular, d }) {
@@ -20,7 +21,7 @@ module.exports = {
         const otros = 0.2 * (0.0625 * 1.75 + 0.07 * 49 + 0.015 * 165 + 0.002 * 60 + 0.07 * 14 + 0.02 * 12.5);
         const costos = { Agua: 1.75, Cacahuate: 49, 'Chile morita': 165, Ajo: 60, Tomate: 14, Cebolla: 12.5, Botellas: 1.7, Otros: otros };
         d.querySelectorAll('.costo-mp').forEach(i => { i.value = costos[i.dataset.nombre]; });
-        set('inv-inicial-mp', 0); set('inv-final-mp-pct', 0); set('inflacion-mp', 5.198);
+        set('inv-inicial-mp', 0); set('criterio-inv-mp', 'excel'); set('inflacion-mp', 5.198);
         set('tiempo-unidad', 4); set('tiempo-unidad-tipo', 'min'); set('costo-hora', 242.34 / 8); set('horas-jornada', 8);
         set('incremento-salarial', (0.1999768612251981 + 0.21997177134791826) / 2 * 100); // promedio 2022-2023 (hoja Fact.sensibil)
         filas('gastos-fijos-container', 'agregarGastoFijo', [['Renta', 30000], ['Mantenimiento', 2400], ['Energía eléctrica', 42000]]
@@ -31,7 +32,7 @@ module.exports = {
             ['Eq. de cómputo', 16799.3, 1 / 0.3], ['Utensilios', 10000, 10], ['Mobiliario', 23228.1, 10]
         ].map(([n, m, v]) => ({ nombre_activo: n, monto: m, vida_util_anios: v, metodo_depreciacion: 'lineal' })));
         filas('gastos-admin-container', 'agregarGastoAdmin', [
-            ['Contador', 4000, 'salario'], ['Chofer', 4800, 'salario'], ['Gerente', 12000, 'salario'], ['Agua', 500, 'inflacion'],
+            ['Contador', 4000, 'honorarios'], ['Chofer', 4800, 'salario'], ['Gerente', 12000, 'salario'], ['Agua', 500, 'inflacion'],
             ['Teléfono e internet', 750, 'inflacion'], ['Papelería', 300, 'inflacion'], ['Combustibles', 4000, 'inflacion'], ['Licencias', 250, 'inflacion']
         ].map(([c, m, t]) => ({ concepto: c, monto_mensual: m, tipo: t })));
         filas('gastos-ventas-container', 'agregarGastoVentas', [['Comisiones', 1], ['Publicidad', 2]]
@@ -40,7 +41,7 @@ module.exports = {
         set('dias-credito-ventas', 1.5); set('dias-credito-compras', 6);
         set('tasa-isr', 30); set('tasa-ptu', 10);
         set('inversion-inicial', 1181483.5997166669); set('pct-financiamiento', 40); set('tasa-interes', 19); set('plazo-credito', 5);
-        set('tasa-ke', 15);
+        set('tasa-ke', 15); set('metodo-vpn', 'saldos'); set('inversion-vpn', 'activos');
     },
     esperados: (G) => ({
         'Mercado potencial año 1': { valor: G.mercadoPotencial[0], esperado: 59241 },
@@ -58,6 +59,19 @@ module.exports = {
         'Cuentas por cobrar': { valor: G.cuentasPorCobrar, esperado: [53317, 70384.27, 92552.39, 121281.30, 158437.68] },
         'Proveedores': { valor: G.cuentasPorPagar, esperado: [75485.00, 97669.91, 127160.43, 165554.86, 215542.57] },
         'Saldo de efectivo año 0': { valor: G.saldoEfectivo0, esperado: 634551.20 },
+        'Inventario final de MP': { valor: G.invFinalMP, esperado: [34583.25, 45016.09, 58609.06, 76302.74, 99342.51] },
+        'Inventario final de PT': { valor: G.invFinalPT, esperado: [41622.95, 55493.04, 74018.10, 99124.07, 134100.26] },
+        'Costo de producción': { valor: G.costoProduccion, esperado: [5451034.07, 7224084.39, 9635548.84, 12904232.32, 17457369.27] },
+        'Costo de lo vendido': { valor: G.costoVendido, esperado: [5409411.11, 7210214.30, 9617023.78, 12879126.36, 17422393.08] },
+        'Gastos de operación (sin depreciación)': { valor: G.gastosOperacion, esperado: [1049872.03, 1374789.67, 1823170.45, 2439331.94, 3325416.04] },
+        'Utilidad antes de impuestos': { valor: G.utilidadAntesImpuestos, esperado: [6132280.62, 8115686.89, 10596523.07, 13635485.40, 17251424.79] },
+        'ISR': { valor: G.isr, esperado: [1839684.19, 2434706.07, 3178956.92, 4090645.62, 5175427.44] },
+        'PTU': { valor: G.ptu, esperado: [613228.06, 811568.69, 1059652.31, 1363548.54, 1725142.48] },
+        'Utilidad neta': { valor: G.utilidadNeta, esperado: [3679368.37, 4869412.13, 6357913.84, 8181291.24, 10350854.87] },
+        'Saldo final de efectivo': { valor: G.saldoEfectivo, esperado: [4317285.58, 9211933.57, 15573796.47, 23728409.87, 33912776.21] },
+        'Total activo': { valor: G.activoTotal, esperado: [4873753.09, 9689783.17, 15985944.12, 24095457.84, 34363273.20] },
         'WACC': { valor: G.wacc, esperado: 0.1356, tol: 0.00001 },
+        'TIR (saldos acumulados vs. activo fijo)': { valor: G.tir, esperado: 8.929408, tol: 0.000001 },
+        'VPN (con WACC correcto de 13.56%)': { valor: G.vpn, esperado: 53257924.13 },
     }),
 };

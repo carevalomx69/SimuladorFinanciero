@@ -1,9 +1,9 @@
 // Caso Lácteos (comercializadora de 10 productos) — EJERCICIO_2_LACTEOS.xlsx
-// Se usa ke = 15.49% y pagos iguales (PMT), que es lo que calculan las fórmulas del Excel
-// (las instrucciones dicen 30% y pagos iguales a capital).
+// Se reproduce el Excel tal cual: ke = 15.49% (lo captura el usuario), mensualidad fija,
+// VPN con flujo neto e inversión total, y sin restar pérdidas de años anteriores.
 module.exports = {
     nombre: 'Lácteos',
-    capturar({ set, filas }) {
+    capturar({ set, filas, d: document }) {
         set('incremento-producto', 5); set('incremento-precio', 13); set('inflacion-mp', 18);
         filas('productos-container', 'agregarProducto', [
             ['Queso Panela 1/2kg', 3260, 45, 18], ['Queso Panela 1kg', 2350, 90, 38], ['Queso Fresco 100grs', 2480, 15, 6],
@@ -22,7 +22,8 @@ module.exports = {
         set('tasa-isr', 30); set('tasa-ptu', 10);
         set('inversion-inicial', 1340263); set('inv-capital-trabajo', 60000);
         set('pct-financiamiento', 80); set('tasa-interes', 18); set('plazo-credito', 5);
-        set('tasa-ke', 15.49); set('metodo-vpn', 'flujo-neto');
+        set('tasa-ke', 15.49); set('metodo-vpn', 'flujo-neto'); set('inversion-vpn', 'total');
+        set('tipo-credito', 'fija'); document.getElementById('amortizar-perdidas').checked = false;
     },
     esperados: (G) => ({
         'Ventas': { valor: G.ventasProyeccion, esperado: [1597300, 1895247.30, 2248920.97, 2668652.43, 3166811.83] },

@@ -577,6 +577,10 @@ function recalcularTodo() {
         sincronizarInputsCostoMP();
         const inflacionMP = num('inflacion-mp');
         const pctInvFinalMP = num('inv-final-mp-pct');
+        // Criterio "excel" (indicado por la maestra): el inventario final de MP es el contenido
+        // de MP del inventario final de producto terminado y NO se suma a las compras;
+        // las compras son producción × receta. Criterio "pct": % del consumo que sí se compra.
+        const criterioInvMP = document.getElementById('criterio-inv-mp')?.value || 'excel';
         const invInicialMPUnid = num('inv-inicial-mp');
         G.costoMP = [];
         document.querySelectorAll('#costos-mp-container .costo-mp').forEach((input, i) => {
@@ -600,9 +604,15 @@ function recalcularTodo() {
             ANIOS.forEach(a => {
                 const costo = costoBase * Math.pow(1 + inflacionMP / 100, a);
                 const consumo = mp.consumoAnual[a];
-                const invFinalUnid = consumo * pctInvFinalMP / 100;
                 const invInicialUnid = invFinalAnteriorUnid;
-                const comprasUnid = Math.max(0, consumo + invFinalUnid - invInicialUnid);
+                let invFinalUnid, comprasUnid;
+                if (criterioInvMP === 'excel') {
+                    invFinalUnid = G.invFinalPTUnid[a] * mp.cantidadPorUnidad;
+                    comprasUnid = Math.max(0, consumo - (a === 0 ? invInicialUnid : 0));
+                } else {
+                    invFinalUnid = consumo * pctInvFinalMP / 100;
+                    comprasUnid = Math.max(0, consumo + invFinalUnid - invInicialUnid);
+                }
                 const invInicialValor = a === 0 ? invInicialUnid * costo : invFinalAnteriorValor;
                 const comprasValor = comprasUnid * costo;
                 const invFinalValor = invFinalUnid * costo;
@@ -754,7 +764,7 @@ function recalcularTodo() {
             ANIOS.forEach(a => {
                 let factor = 1;
                 if (tipo === 'inflacion') factor = Math.pow(1 + inflacion / 100, a);
-                if (tipo === 'salario') factor = Math.pow(1 + incSalarial / 100, a);
+                if (tipo === 'salario' || tipo === 'honorarios') factor = Math.pow(1 + incSalarial / 100, a);
                 const anual = mensual * 12 * factor;
                 G.gastosAdmin[a] += anual;
                 if (tipo === 'salario') G.sueldosAdmin[a] += anual;
@@ -852,11 +862,15 @@ function recalcularTodo() {
         if (G.credito > 0 && plazoAnios > 0) {
             const i = tasaInteres / 100 / 12;
             const n = Math.round(plazoAnios * 12);
-            G.pagoMensual = i > 0 ? G.credito * i / (1 - Math.pow(1 + i, -n)) : G.credito / n;
+            // "fija": mensualidad fija (PMT). "capital": pagos iguales a capital + intereses sobre saldo.
+            const tipoCredito = document.getElementById('tipo-credito')?.value || 'fija';
+            G.pagoMensual = tipoCredito === 'capital'
+                ? G.credito / n + G.credito * i
+                : (i > 0 ? G.credito * i / (1 - Math.pow(1 + i, -n)) : G.credito / n);
             let saldo = G.credito;
             for (let mes = 1; mes <= Math.min(n, 60); mes++) {
                 const interes = saldo * i;
-                const capital = Math.min(G.pagoMensual - interes, saldo);
+                const capital = Math.min(tipoCredito === 'capital' ? G.credito / n : G.pagoMensual - interes, saldo);
                 saldo -= capital;
                 const a = Math.floor((mes - 1) / 12);
                 G.intereses[a] += interes;
@@ -868,7 +882,7 @@ function recalcularTodo() {
             }
         }
         setHTML('tabla-amortizacion', G.credito > 0
-            ? `<p class="text-sm text-gray-600 mb-2">Crédito: <b>${fmtMoneda(G.credito)}</b> · Pago mensual: <b>${fmtMoneda(G.pagoMensual)}</b> · Aportación socios: <b>${fmtMoneda(G.aportacion)}</b></p>` +
+            ? `<p class="text-sm text-gray-600 mb-2">Crédito: <b>${fmtMoneda(G.credito)}</b> · ${document.getElementById('tipo-credito')?.value === 'capital' ? 'Primer pago' : 'Pago mensual'}: <b>${fmtMoneda(G.pagoMensual)}</b> · Aportación socios: <b>${fmtMoneda(G.aportacion)}</b></p>` +
               tablaAnual([
                   { label: 'Intereses', data: G.intereses },
                   { label: 'Amortización de capital', data: G.amortizacion },
@@ -885,13 +899,29 @@ function recalcularTodo() {
         G.isr = [];
         G.ptu = [];
         G.utilidadNeta = [];
+        G.perdidaAplicada = [];
+        // Pérdidas de años anteriores: se restan de la utilidad de los años siguientes para el ISR.
+        // La PTU se calcula solo cuando el año tiene utilidad.
+        const amortizarPerdidas = document.getElementById('amortizar-perdidas')?.checked ?? true;
+        let perdidaPendiente = 0;
         ANIOS.forEach(a => {
             G.utilidadBruta[a] = G.ventasProyeccion[a] - G.costoVendido[a];
             G.utilidadOperacion[a] = G.utilidadBruta[a] - G.gastosOperacion[a] - G.depreciacion[a];
             G.utilidadAntesImpuestos[a] = G.utilidadOperacion[a] - G.intereses[a];
-            const base = Math.max(0, G.utilidadAntesImpuestos[a]);
-            G.isr[a] = base * tasaISR;
-            G.ptu[a] = base * tasaPTU;
+            const uai = G.utilidadAntesImpuestos[a];
+            let baseISR = Math.max(0, uai);
+            G.perdidaAplicada[a] = 0;
+            if (amortizarPerdidas) {
+                if (uai < 0) {
+                    perdidaPendiente += -uai;
+                } else {
+                    G.perdidaAplicada[a] = Math.min(perdidaPendiente, uai);
+                    perdidaPendiente -= G.perdidaAplicada[a];
+                    baseISR = uai - G.perdidaAplicada[a];
+                }
+            }
+            G.isr[a] = baseISR * tasaISR;
+            G.ptu[a] = Math.max(0, uai) * tasaPTU;
             G.utilidadNeta[a] = G.utilidadAntesImpuestos[a] - G.isr[a] - G.ptu[a];
         });
         setHTML('estado-resultados', tablaAnual([
@@ -903,6 +933,7 @@ function recalcularTodo() {
             { label: 'UTILIDAD DE OPERACIÓN', data: G.utilidadOperacion, clase: 'bg-yellow-50', negrita: true },
             { label: '(−) Gastos financieros (intereses)', data: G.intereses },
             { label: 'UTILIDAD ANTES DE IMPUESTOS', data: G.utilidadAntesImpuestos, negrita: true },
+            ...(G.perdidaAplicada.some(x => x > 0) ? [{ label: 'Pérdidas de años anteriores aplicadas (solo para ISR)', data: G.perdidaAplicada }] : []),
             { label: `(−) ISR (${(tasaISR * 100).toFixed(0)}%)`, data: G.isr },
             { label: `(−) PTU (${(tasaPTU * 100).toFixed(0)}%)`, data: G.ptu },
             { label: 'UTILIDAD NETA', data: G.utilidadNeta, clase: 'bg-green-100', negrita: true }
@@ -1007,7 +1038,9 @@ function recalcularTodo() {
             : '<p class="mt-2 text-sm font-semibold text-red-700">✖ El balance NO cuadra, revisa los datos capturados</p>'));
 
         // ---------- 17. EVALUACIÓN (WACC, VPN, TIR, B/C, PRI) Y RAZONES ----------
-        calcularEvaluacion(tasaISR + tasaPTU, tasaInteres);
+        // t del WACC: ISR + PTU si el proyecto tiene utilidad (algún año con utilidad); si no, solo ISR
+        const hayUtilidad = G.utilidadAntesImpuestos.some(u => u > 0);
+        calcularEvaluacion(tasaISR + (hayUtilidad ? tasaPTU : 0), tasaInteres, hayUtilidad);
 
         generarResumenEjecutivo();
     } catch (err) {
@@ -1069,7 +1102,7 @@ function tir(flujos) {
     return (bajo + alto) / 2;
 }
 
-function calcularEvaluacion(tasaImpuestos, tasaInteres) {
+function calcularEvaluacion(tasaImpuestos, tasaInteres, hayUtilidad = true) {
     const G = globalData;
     const ke = num('tasa-ke') / 100;
     const kd = tasaInteres / 100;
@@ -1080,18 +1113,25 @@ function calcularEvaluacion(tasaImpuestos, tasaInteres) {
 
     // Método "proyecto": flujo neto + intereses + amortización (antes de financiamiento)
     // Método "flujo-neto": el flujo neto del flujo de efectivo tal cual (como el ejercicio de Lácteos)
-    const metodo = document.getElementById('metodo-vpn')?.value || 'proyecto';
-    G.flujoProyecto = ANIOS.map(a => metodo === 'flujo-neto'
-        ? G.flujoNeto[a]
-        : G.flujoNeto[a] + G.intereses[a] + G.amortizacion[a]);
-    const flujos = [-G.inversionTotal, ...G.flujoProyecto];
+    // Método "saldos": saldos acumulados de efectivo (indicado por la maestra, como SALCERA)
+    const metodo = document.getElementById('metodo-vpn')?.value || 'saldos';
+    G.flujoProyecto = ANIOS.map(a => {
+        if (metodo === 'saldos') return G.saldoEfectivo[a];
+        if (metodo === 'flujo-neto') return G.flujoNeto[a];
+        return G.flujoNeto[a] + G.intereses[a] + G.amortizacion[a];
+    });
+    // Inversión del año 0: "activos" = lo invertido en activos (activo fijo y diferido + inventario
+    // comprado al inicio), indicado por la maestra; "total" = inversión total capturada.
+    const tipoInversion = document.getElementById('inversion-vpn')?.value || 'activos';
+    G.inversionVPN = tipoInversion === 'total' ? G.inversionTotal : G.activoFijo + (G.invCapitalTrabajo || 0);
+    const flujos = [-G.inversionVPN, ...G.flujoProyecto];
     G.vpn = vpn(G.wacc, flujos);
     G.tir = tir(flujos);
     const vpFlujos = G.flujoProyecto.reduce((s, f, a) => s + f / Math.pow(1 + G.wacc, a + 1), 0);
-    G.beneficioCosto = G.inversionTotal > 0 ? vpFlujos / G.inversionTotal : NaN;
+    G.beneficioCosto = G.inversionVPN > 0 ? vpFlujos / G.inversionVPN : NaN;
 
     // Periodo de recuperación (años y meses)
-    let acumulado = -G.inversionTotal;
+    let acumulado = -G.inversionVPN;
     G.pri = null;
     for (let a = 0; a < 5; a++) {
         const antes = acumulado;
@@ -1105,7 +1145,7 @@ function calcularEvaluacion(tasaImpuestos, tasaInteres) {
             break;
         }
     }
-    if (G.inversionTotal <= 0) G.pri = { anios: 0, meses: 0 };
+    if (G.inversionVPN <= 0) G.pri = { anios: 0, meses: 0 };
     const textoPRI = G.pri ? `${G.pri.anios} años ${G.pri.meses} meses` : 'No se recupera en 5 años';
 
     let htmlEval = `
@@ -1115,11 +1155,11 @@ function calcularEvaluacion(tasaImpuestos, tasaInteres) {
             <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">TIR</div><div class="text-xl font-bold">${fmtPct(G.tir)}</div></div>
             <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Beneficio / Costo</div><div class="text-xl font-bold">${fmtVeces(G.beneficioCosto)}</div></div>
             <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Periodo de recuperación</div><div class="text-xl font-bold">${textoPRI}</div></div>
-            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Inversión total</div><div class="text-xl font-bold">${fmtMoneda(G.inversionTotal)}</div></div>
+            <div class="bg-gray-50 p-3 rounded"><div class="text-xs text-gray-500">Inversión del año 0</div><div class="text-xl font-bold">${fmtMoneda(G.inversionVPN)}</div></div>
         </div>
-        <p class="text-xs text-gray-500 mb-2">WACC = E/(D+E)·ke + D/(D+E)·kd·(1−t), con E = ${fmtMoneda(E)}, D = ${fmtMoneda(D)}, ke = ${(ke * 100).toFixed(2)}%, kd = ${(kd * 100).toFixed(2)}%, t = ${(tasaImpuestos * 100).toFixed(0)}% (ISR + PTU).</p>`;
+        <p class="text-xs text-gray-500 mb-2">WACC = E/(D+E)·ke + D/(D+E)·kd·(1−t), con E = ${fmtMoneda(E)}, D = ${fmtMoneda(D)}, ke = ${(ke * 100).toFixed(2)}%, kd = ${(kd * 100).toFixed(2)}%, t = ${(tasaImpuestos * 100).toFixed(0)}% (${hayUtilidad ? 'ISR + PTU, porque hay utilidad' : 'solo ISR, porque no hay utilidad'}).</p>`;
     htmlEval += tablaAnual([
-        { label: metodo === 'flujo-neto' ? 'Flujo neto' : 'Flujo del proyecto', data: [-G.inversionTotal, ...G.flujoProyecto] },
+        { label: metodo === 'saldos' ? 'Saldo acumulado de efectivo' : (metodo === 'flujo-neto' ? 'Flujo neto' : 'Flujo del proyecto'), data: [-G.inversionVPN, ...G.flujoProyecto] },
         { label: 'Flujo descontado (WACC)', data: flujos.map((f, t) => f / Math.pow(1 + G.wacc, t)) }
     ], true);
     setHTML('evaluacion-resultado', htmlEval);
@@ -1272,7 +1312,7 @@ function agregarGastoAdmin(gasto = null) {
     const concepto = gasto ? gasto.concepto : '';
     const monto = gasto ? gasto.monto_mensual : '';
     const tipo = (gasto && gasto.tipo) ? gasto.tipo : 'inflacion';
-    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-admin-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto mensual" class="gasto-admin-monto text-sm" step="any" onchange="calcularGastosOperacion()" value="${monto || ''}"><select class="gasto-admin-tipo text-sm" onchange="calcularGastosOperacion()" title="¿Con qué sube cada año?"><option value="inflacion" ${tipo === 'inflacion' ? 'selected' : ''}>Sube con inflación</option><option value="salario" ${tipo === 'salario' ? 'selected' : ''}>Es sueldo (sube con incremento salarial)</option><option value="fijo" ${tipo === 'fijo' ? 'selected' : ''}>No cambia</option></select>`;
+    newRow.innerHTML = `<input type="text" placeholder="Concepto" class="gasto-admin-concepto text-sm" value="${concepto || ''}"><input type="number" placeholder="Monto mensual" class="gasto-admin-monto text-sm" step="any" onchange="calcularGastosOperacion()" value="${monto || ''}"><select class="gasto-admin-tipo text-sm" onchange="calcularGastosOperacion()" title="¿Con qué sube cada año?"><option value="inflacion" ${tipo === 'inflacion' ? 'selected' : ''}>Sube con inflación</option><option value="salario" ${tipo === 'salario' ? 'selected' : ''}>Es sueldo (sube con incremento salarial)</option><option value="honorarios" ${tipo === 'honorarios' ? 'selected' : ''}>Honorarios (sube con incremento salarial, sin carga social)</option><option value="fijo" ${tipo === 'fijo' ? 'selected' : ''}>No cambia</option></select>`;
     container.appendChild(newRow);
 }
 
@@ -1291,7 +1331,8 @@ const CAMPOS_EXTRA = [
     'usos-mensuales', 'dias-inventario', 'dias-laborables', 'inflacion-mp',
     'tiempo-unidad-tipo', 'horas-jornada', 'incremento-salarial', 'pct-carga-social',
     'tasa-isr', 'tasa-ptu', 'pct-financiamiento', 'tasa-interes', 'plazo-credito',
-    'tasa-ke', 'inv-inicial-pt', 'inv-capital-trabajo', 'metodo-vpn'
+    'tasa-ke', 'inv-inicial-pt', 'inv-capital-trabajo', 'metodo-vpn',
+    'criterio-inv-mp', 'tipo-credito', 'inversion-vpn'
 ];
 
 function recolectarParametrosExtra() {
@@ -1301,6 +1342,7 @@ function recolectarParametrosExtra() {
         if (el) extra[id] = el.value;
     });
     extra['redondear-precio'] = document.getElementById('redondear-precio')?.checked || false;
+    extra['amortizar-perdidas'] = document.getElementById('amortizar-perdidas')?.checked ?? true;
     extra.productos = [];
     document.querySelectorAll('#productos-container .producto-item').forEach(fila => {
         const nombre = fila.querySelector('.prod-nombre').value;
@@ -1329,6 +1371,12 @@ function aplicarParametrosExtra(extra) {
     });
     const chk = document.getElementById('redondear-precio');
     if (chk) chk.checked = !!extra['redondear-precio'];
+    const chkPerd = document.getElementById('amortizar-perdidas');
+    if (chkPerd) chkPerd.checked = extra['amortizar-perdidas'] !== undefined ? !!extra['amortizar-perdidas'] : true;
+    // Proyectos guardados antes de estas opciones conservan su criterio anterior
+    if (extra['criterio-inv-mp'] === undefined) { const el = document.getElementById('criterio-inv-mp'); if (el) el.value = 'pct'; }
+    if (extra['metodo-vpn'] === undefined) { const el = document.getElementById('metodo-vpn'); if (el) el.value = 'proyecto'; }
+    if (extra['inversion-vpn'] === undefined) { const el = document.getElementById('inversion-vpn'); if (el) el.value = 'total'; }
     const cont = document.getElementById('productos-container');
     if (cont) {
         cont.innerHTML = '';
@@ -1363,8 +1411,11 @@ function nuevoProyecto() {
     document.getElementById('gastos-fijos-container').innerHTML = '';
     document.getElementById('gastos-variables-container').innerHTML = '';
     document.getElementById('productos-container').innerHTML = '';
-    const metodoVpn = document.getElementById('metodo-vpn');
-    if (metodoVpn) metodoVpn.value = 'proyecto';
+    // Valores por defecto = criterios indicados por la maestra
+    const porDefecto = { 'metodo-vpn': 'saldos', 'inversion-vpn': 'activos', 'criterio-inv-mp': 'excel', 'tipo-credito': 'fija' };
+    Object.entries(porDefecto).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+    const chkPerdidas = document.getElementById('amortizar-perdidas');
+    if (chkPerdidas) chkPerdidas.checked = true;
     _firmaMP = null;
     const chkPrecio = document.getElementById('redondear-precio');
     if (chkPrecio) chkPrecio.checked = false;
