@@ -42,6 +42,7 @@ $campos = [
     'inv_final_a1', 'inv_final_a2', 'inv_final_a3', 'inv_final_a4', 'inv_final_a5',
     'inv_inicial_mp', 'inv_final_mp_pct', 'tiempo_unidad_mo', 'costo_hora_mo',
     'inversion_inicial', 'saldo_inicial', 'pct_cobro_efectivo', 'inflacion_anual',
+    'parametros_extra', // JSON con los campos nuevos (crédito, ISR/PTU, WACC, etc.)
 ];
 
 $valores = [];

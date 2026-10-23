@@ -1,0 +1,11 @@
+{
+  "name": "pruebas-simulador",
+  "private": true,
+  "description": "Prueba automática: corre la app en un navegador simulado con los casos del profesor y compara contra los Excel",
+  "scripts": {
+    "test": "node correr_pruebas.js"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.3"
+  }
+}
