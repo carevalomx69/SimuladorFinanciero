@@ -260,7 +260,7 @@
                     <input type="text" id="nombre_proyecto" placeholder="Nombre del Proyecto" class="w-full">
                     <button id="btn-guardar" onclick="guardarProyecto()"
                         class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-all whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">
-                        💾 Guardar
+                        Guardar
                     </button>
                     <button onclick="nuevoProyecto()"
                         class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition-all whitespace-nowrap">
@@ -481,9 +481,6 @@
                                 <p>Ingrese precio base y unidades para calcular</p>
                             </div>
                         </div>
-                    </div>
-                    <div class="chart-container">
-                        <canvas id="chartVentas"></canvas>
                     </div>
                 </div>
             </div>
@@ -914,7 +911,7 @@
             <!-- PESTAÑA 14 NUEVA: Estado Resultados -->
             <div id="estado-resultados-tab" class="tab-content">
                 <div class="bg-white rounded-lg shadow-lg p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-6">14. 📊 Estado de Resultados Integral (ERI)</h2>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">14. Estado de Resultados Integral (ERI)</h2>
                     <label class="flex items-center gap-2 mb-3 text-sm text-gray-700"><input type="checkbox" id="amortizar-perdidas" checked onchange="recalcularTodo()"> Amortizar pérdidas fiscales: las pérdidas de años anteriores se restan de la utilidad antes de calcular el ISR (la PTU se calcula solo en años con utilidad)</label>
                     <div class="grid grid-cols-2 gap-4 mb-4">
                         <div><label class="block text-sm font-medium text-gray-700 mb-2">ISR (%)</label><input type="number" id="tasa-isr" class="w-full" placeholder="30" step="any" data-opcional onchange="recalcularTodo()"></div>
@@ -927,11 +924,11 @@
                         </div>
                     </div>
                     <div class="mt-4 bg-blue-50 p-4 rounded">
-                        <h4 class="font-semibold text-blue-800 mb-2">ℹ️ Información</h4>
+                        <h4 class="nota-titulo">Qué incluye</h4>
                         <p class="text-sm text-gray-600">El Estado de Resultados muestra la rentabilidad del proyecto
                             incluyendo:</p>
                         <ul class="text-xs text-gray-600 mt-2 space-y-1 ml-4">
-                            <li>• Ingresos por ventas con precios variables</li>
+                            <li>• Ventas de cada año</li>
                             <li>• Costo de lo vendido</li>
                             <li>• Gastos de operación</li>
                             <li>• Depreciación</li>
@@ -939,9 +936,6 @@
                             <li>• ISR y PTU</li>
                             <li>• Utilidad neta después de impuestos</li>
                         </ul>
-                    </div>
-                    <div class="chart-container">
-                        <canvas id="chartResultados"></canvas>
                     </div>
                 </div>
             </div>
@@ -992,9 +986,6 @@
                                 <p>Complete todos los presupuestos para ver el resumen</p>
                             </div>
                         </div>
-                        <div class="chart-container">
-                            <canvas id="chartFlujo"></canvas>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1003,7 +994,7 @@
             <!-- PESTAÑA 16 NUEVA: Balance -->
             <div id="estado-situacion-tab" class="tab-content">
                 <div class="bg-white rounded-lg shadow-lg p-6">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-6">16. 🏦 Estado de Situación Financiera (Balance
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">16. Estado de Situación Financiera (Balance
                         General)</h2>
                     <div class="result-box p-4 rounded-lg">
                         <div id="estado-situacion">
@@ -1011,7 +1002,7 @@
                         </div>
                     </div>
                     <div class="mt-4 bg-green-50 p-4 rounded">
-                        <h4 class="font-semibold text-green-800 mb-2">ℹ️ Información</h4>
+                        <h4 class="nota-titulo">Qué incluye</h4>
                         <p class="text-sm text-gray-600">El Balance muestra la situación financiera incluyendo:</p>
                         <ul class="text-xs text-gray-600 mt-2 space-y-1 ml-4">
                             <li>• <strong>Activos:</strong> Efectivo, Cuentas por Cobrar, Inventarios, Activo Fijo</li>
@@ -1062,33 +1053,32 @@
 
     </div>
 
-    <div class="fixed bottom-6 right-6 space-y-3 z-40 flex flex-col items-center">
-
-        <button onclick="mostrarGraficos()"
-            class="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-            title="Ver Gráficos de Rentabilidad">
-            📈
+    <div class="acciones-flotantes" aria-label="Acciones rápidas">
+        <button onclick="mostrarGraficos()" class="boton-flotante" aria-label="Ver gráficas de rentabilidad">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3"/></svg>
+            <span class="boton-flotante-texto">Gráficas</span>
         </button>
-        <button onclick="exportarDatos()"
-            class="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-            title="Exportar Datos (Ctrl+S)">
-            📊
+        <button onclick="exportarDatos()" class="boton-flotante" aria-label="Exportar datos (Ctrl+S)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            <span class="boton-flotante-texto">Exportar (Ctrl+S)</span>
         </button>
-        <button onclick="imprimirReporte()"
-            class="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-            title="Imprimir Reporte (Ctrl+P)">
-            🖨️
+        <button onclick="imprimirReporte()" class="boton-flotante" aria-label="Imprimir reporte (Ctrl+P)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M7 14h10v6H7z"/></svg>
+            <span class="boton-flotante-texto">Imprimir (Ctrl+P)</span>
         </button>
     </div>
     <div id="modal-graficos"
-        class="fixed inset-0 bg-gray-900 bg-opacity-95 z-[100] hidden items-center justify-center p-4">
+        class="fixed inset-0 bg-gray-900 bg-opacity-80 z-[100] hidden items-center justify-center p-4">
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden relative">
 
-            <div class="bg-gray-100 px-6 py-4 border-b flex justify-between items-center">
-                <h2 class="text-2xl font-bold text-gray-800">📊 Tablero de Rentabilidad</h2>
+            <div class="modal-encabezado">
+                <div class="flex items-center gap-3">
+                    <img src="style/img/nuko-isotipo.png" alt="" class="h-8 w-auto">
+                    <h2 class="text-xl font-bold">Tablero de rentabilidad</h2>
+                </div>
                 <button onclick="document.getElementById('modal-graficos').style.display='none'"
-                    class="text-gray-500 hover:text-red-600 text-3xl font-bold leading-none">&times;</button>
+                    class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
             <div class="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1118,20 +1108,16 @@
 
             <div class="bg-gray-50 px-6 py-3 border-t text-right">
                 <button onclick="document.getElementById('modal-graficos').style.display='none'"
-                    class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">Cerrar</button>
+                    class="boton-salir">Cerrar</button>
             </div>
         </div>
     </div>
 
-    <footer class="bg-gray-800 text-white py-8 mt-12">
-        <div class="max-w-7xl mx-auto px-4 text-center">
-            <p class="text-gray-400">Análisis Financiero de Proyectos v2.0 - Herramienta de Gestión Empresarial</p>
-            <div class="mt-4 text-sm text-gray-500">
-                <p>💡 Consejos: Usa Ctrl+S para exportar • Ctrl+P para imprimir • Los cálculos se actualizan
-                    automáticamente</p>
-                <p class="mt-2">✨ Nuevas funcionalidades: Concentración, Penetración, Precio Variable, Condiciones
-                    Comerciales, Depreciación, Estados Financieros</p>
-            </div>
+    <footer class="pie">
+        <div class="pie-contenido">
+            <img src="style/img/nuko-logo.png" alt="NÜKO · Proyectos que generan valor" class="pie-logo">
+            <p class="pie-texto">Simulador financiero de proyectos de inversión: presupuestos, estados financieros y evaluación (WACC, VPN, TIR, B/C y PRI) a 5 años.</p>
+            <p class="pie-consejos">Los cálculos se actualizan solos · Ctrl+S exporta los datos · Ctrl+P imprime el reporte</p>
         </div>
     </footer>
 

@@ -212,7 +212,7 @@ function mostrarToast(mensaje, tipo = 'info') {
     const colores = {
         success: 'bg-green-600',
         error: 'bg-red-600',
-        info: 'bg-gray-800',
+        info: 'bg-ink-900',
     };
     const iconos = { success: '✅', error: '❌', info: 'ℹ️' };
 
@@ -1373,8 +1373,8 @@ function generarResumenEjecutivo() {
             </div>
         </div>
         <div class="mt-4 text-sm text-gray-600">
-            <p><strong>Recomendación:</strong> ${G.vpn > 0 ? 'El VPN es positivo: el proyecto genera valor y es viable.' : 'El VPN es negativo o cero: revisar costos, precios o financiamiento.'}</p>
-            <p><strong>Participación de mercado:</strong> Año 1: ${(G.penetracionMercado[0] || 0).toFixed(2)}% → Año 5: ${(G.penetracionMercado[4] || 0).toFixed(2)}%</p>
+            <p><strong>Recomendación:</strong> ${ventasTotal === 0 ? 'Captura los datos del proyecto para ver la recomendación.' : (G.vpn > 0 ? 'El VPN es positivo: el proyecto genera valor y es viable.' : 'El VPN es negativo o cero: revisar costos, precios o financiamiento.')}</p>
+            ${G.mercadoConcentrado > 0 ? `<p><strong>Participación de mercado:</strong> Año 1: ${(G.penetracionMercado[0] || 0).toFixed(2)}% → Año 5: ${(G.penetracionMercado[4] || 0).toFixed(2)}%</p>` : ''}
         </div>`;
     setHTML('resumen-ejecutivo', html);
 }
@@ -1610,7 +1610,7 @@ function guardarProyecto() {
     const btnGuardar = document.getElementById('btn-guardar');
     if (btnGuardar) {
         btnGuardar.disabled = true;
-        btnGuardar.textContent = '⏳ Guardando...';
+        btnGuardar.textContent = 'Guardando…';
     }
 
     // PARTE 1: Recolecta todos los campos de texto principales
@@ -1767,7 +1767,7 @@ function guardarProyecto() {
         .finally(() => {
             if (btnGuardar) {
                 btnGuardar.disabled = false;
-                btnGuardar.textContent = '💾 Guardar';
+                btnGuardar.textContent = 'Guardar';
             }
         });
 }
@@ -1800,8 +1800,8 @@ function cargarListaDeProyectos() {
                             <a href="#" class="text-blue-600 hover:underline text-sm font-medium truncate mr-2" onclick="cargarProyecto(${proyecto.id_proyecto}); return false;">
                                 ${proyecto.nombre_proyecto}
                             </a>
-                            <button onclick="borrarProyecto(${proyecto.id_proyecto})" class="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-100 transition-colors" title="Eliminar Proyecto">
-                                🗑️
+                            <button onclick="borrarProyecto(${proyecto.id_proyecto})" class="boton-borrar" title="Eliminar proyecto" aria-label="Eliminar proyecto">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/></svg>
                             </button>
                         </li>
                     `;
