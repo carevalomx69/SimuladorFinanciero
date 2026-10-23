@@ -268,7 +268,9 @@ function mostrarConfirmacion(mensaje) {
 // le pone un check al botón correspondiente en el sidebar.
 function verificarCompletitudSecciones() {
     document.querySelectorAll('.tab-content').forEach(tab => {
-        const campos = tab.querySelectorAll('input[type="number"]:not([readonly]):not([data-opcional]), input[type="text"]:not([readonly]):not([data-opcional])');
+        const tipo = document.body.dataset.tipoEmpresa || 'fabricante';
+        const campos = Array.from(tab.querySelectorAll('input[type="number"]:not([readonly]):not([data-opcional]), input[type="text"]:not([readonly]):not([data-opcional])'))
+            .filter(campo => !ocultoPorTipo(campo, tipo));
         if (campos.length === 0) return; // secciones que son solo resultados, sin nada que llenar
 
         let completo = true;
@@ -296,7 +298,111 @@ document.addEventListener('input', function (e) {
 // 2. FUNCIONES DE INTERFAZ Y CONVERSIÓN (MODAL/SOCKET)
 // ====================================================================
 
+// ====================================================================
+// TIPO DE EMPRESA: oculta las secciones y campos que no se usan
+// ====================================================================
+// Secciones completas que cada tipo de empresa no necesita
+const SECCIONES_OCULTAS = {
+    fabricante: [],
+    comercializadora: ['ppto-prod', 'ppto-mtp', 'ppto-mo', 'ppto-gts-i', 'valuacion-inv'],
+    servicios: ['ppto-prod', 'ppto-mtp', 'ppto-comp-mp', 'valuacion-inv'],
+    mixta: [], // fabrica y además revende: se muestra todo
+};
+
+// Marca cada sección (botón del menú y pestaña) con los tipos que la ocultan.
+// Los campos sueltos ya vienen marcados en el HTML con data-oculto-en.
+function marcarSeccionesPorTipo() {
+    const porSeccion = {};
+    Object.entries(SECCIONES_OCULTAS).forEach(([tipo, secciones]) => {
+        secciones.forEach(id => { (porSeccion[id] = porSeccion[id] || []).push(tipo); });
+    });
+    Object.entries(porSeccion).forEach(([id, tipos]) => {
+        const valor = tipos.join(' ');
+        const tab = document.getElementById(id);
+        const boton = document.querySelector(`.nav-button[data-tab="${id}"]`);
+        if (tab) tab.setAttribute('data-oculto-en', valor);
+        if (boton) boton.setAttribute('data-oculto-en', valor);
+    });
+}
+
+function ocultoPorTipo(elemento, tipo) {
+    const marcado = elemento.closest('[data-oculto-en]');
+    return !!marcado && marcado.getAttribute('data-oculto-en').split(/\s+/).includes(tipo);
+}
+
+// tipo '' = todavía no se elige: el menú queda bloqueado hasta escoger uno
+function seleccionarTipoEmpresa(tipo, recalcular = true) {
+    if (tipo !== '' && !SECCIONES_OCULTAS[tipo]) tipo = 'fabricante';
+    const input = document.getElementById('tipo-empresa');
+    if (input) input.value = tipo;
+    document.body.dataset.tipoEmpresa = tipo;
+    document.querySelectorAll('.tipo-card').forEach(card => {
+        const activo = card.dataset.tipo === tipo;
+        card.classList.toggle('activo', activo);
+        card.setAttribute('aria-checked', String(activo));
+    });
+    // Si la pestaña abierta quedó oculta, regresamos a la primera
+    const abierta = document.querySelector('.tab-content.active');
+    if (abierta && (tipo === '' ? abierta.id !== 'plan' : ocultoPorTipo(abierta, tipo))) showTab('plan');
+    // Al elegir por primera vez, abrimos el menú para que vea las secciones
+    if (tipo !== '' && recalcular && window.innerWidth >= 768) alternarMenu(true);
+    bloquearCamposSinTipo(tipo === '');
+    if (recalcular) recalcularTodo();
+    verificarCompletitudSecciones();
+}
+
+// Sin tipo de empresa no se puede escribir en ningún campo de las secciones
+// (solo funcionan las tarjetas de tipo y la guía)
+function bloquearCamposSinTipo(bloquear) {
+    document.querySelectorAll('.tab-content input, .tab-content select, .tab-content textarea').forEach(campo => {
+        if (campo.type === 'hidden') return;
+        if (bloquear) {
+            if (!campo.disabled) {
+                campo.disabled = true;
+                campo.dataset.bloqueadoPorTipo = '1';
+                campo.dataset.tituloOriginal = campo.title || '';
+                campo.title = 'Primero elige el tipo de empresa';
+            }
+        } else if (campo.dataset.bloqueadoPorTipo) {
+            campo.disabled = false;
+            campo.title = campo.dataset.tituloOriginal || '';
+            delete campo.dataset.bloqueadoPorTipo;
+            delete campo.dataset.tituloOriginal;
+        }
+    });
+    document.querySelectorAll('.tab-content button:not(.tipo-card)').forEach(boton => {
+        boton.disabled = bloquear;
+    });
+}
+
+// Si intentan escribir en un campo bloqueado, se avisa y se señala el recuadro de tipo
+document.addEventListener('pointerdown', function (e) {
+    if (document.body.dataset.tipoEmpresa !== '') return;
+    const zona = e.target.closest('.tab-content');
+    if (!zona || e.target.closest('#datos-generales .tipos-empresa, #datos-generales .ayuda-tipo')) return;
+    if (e.target.closest('input, select, textarea, label, button')) {
+        mostrarToast('Primero elige el tipo de empresa en "Datos generales del proyecto".', 'info');
+        const datos = document.getElementById('datos-generales');
+        if (datos) {
+            datos.classList.remove('llamar-atencion');
+            void datos.offsetWidth;
+            datos.classList.add('llamar-atencion');
+            datos.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+});
+
 function showTab(tabId) {
+    if (tabId !== 'plan' && !document.getElementById('tipo-empresa')?.value) {
+        mostrarToast('Primero elige el tipo de empresa en "Datos generales del proyecto".', 'info');
+        const datos = document.getElementById('datos-generales');
+        if (datos) {
+            datos.classList.remove('llamar-atencion');
+            void datos.offsetWidth; // reinicia la animación
+            datos.classList.add('llamar-atencion');
+        }
+        return;
+    }
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
     });
@@ -511,15 +617,37 @@ function recalcularTodo() {
             G.productos.push(prod);
         });
 
+        // Qué ventas cuentan según el tipo de empresa:
+        //  - Fabricante / Servicios: solo el producto o servicio propio (precio base × unidades)
+        //  - Comercializadora: solo los productos de reventa
+        //  - Mixta (o sin elegir): se suman los dos
+        const tipoEmp = document.getElementById('tipo-empresa')?.value || '';
+        const usaPropio = tipoEmp !== 'comercializadora';
+        const usaReventa = tipoEmp === 'comercializadora' || tipoEmp === 'mixta' || tipoEmp === '';
+        if (!usaReventa) G.productos = [];
+
+        G.unidadesPropias = [];
+        G.precioPropio = [];
+        G.ventasPropias = [];
+        G.ventasReventa = [0, 0, 0, 0, 0];
+        ANIOS.forEach(a => {
+            let precio = a === 0 ? precioBase : G.precioPropio[a - 1] * (1 + incPrecio / 100);
+            if (a > 0 && redondearPrecio) precio = redondearArriba(precio);
+            G.precioPropio[a] = usaPropio ? precio : 0;
+            G.unidadesPropias[a] = usaPropio ? num(`unidades-${a + 1}`) : 0;
+            G.ventasPropias[a] = G.unidadesPropias[a] * G.precioPropio[a];
+
+            const unidadesReventa = G.productos.reduce((t, p) => t + p.unidades[a], 0);
+            G.ventasReventa[a] = G.productos.reduce((t, p) => t + p.ventas[a], 0);
+            G.costoMercancia[a] = G.productos.reduce((t, p) => t + p.costoTotal[a], 0);
+
+            G.unidadesVenta[a] = G.unidadesPropias[a] + unidadesReventa;
+            G.ventasProyeccion[a] = G.ventasPropias[a] + G.ventasReventa[a];
+            G.precioUnitario[a] = G.unidadesVenta[a] > 0 ? G.ventasProyeccion[a] / G.unidadesVenta[a] : G.precioPropio[a];
+        });
+
+        const hayPropio = G.unidadesPropias.some(u => u > 0);
         if (G.productos.length > 0) {
-            ANIOS.forEach(a => {
-                G.unidadesVenta[a] = G.productos.reduce((s, p) => s + p.unidades[a], 0);
-                G.ventasProyeccion[a] = G.productos.reduce((s, p) => s + p.ventas[a], 0);
-                G.costoMercancia[a] = G.productos.reduce((s, p) => s + p.costoTotal[a], 0);
-                G.precioUnitario[a] = G.unidadesVenta[a] > 0 ? G.ventasProyeccion[a] / G.unidadesVenta[a] : 0;
-                const input = document.getElementById(`unidades-${a + 1}`);
-                if (input) input.value = G.unidadesVenta[a];
-            });
             let htmlProd = '';
             G.productos.forEach(p => {
                 htmlProd += `<div class="font-semibold text-gray-700 mt-3">${p.nombre}</div>` + tablaAnual([
@@ -530,21 +658,17 @@ function recalcularTodo() {
                 ]);
             });
             setHTML('ventas-proyeccion', tablaAnual([
-                { label: 'Unidades (todos)', data: G.unidadesVenta, fmt: v => fmtNum(v) },
+                ...(hayPropio ? [
+                    { label: 'Ventas del producto propio', data: G.ventasPropias },
+                    { label: 'Ventas de reventa', data: G.ventasReventa }
+                ] : [{ label: 'Unidades (todos)', data: G.unidadesVenta, fmt: v => fmtNum(v) }]),
                 { label: 'Ventas totales', data: G.ventasProyeccion, negrita: true },
                 { label: 'Costo de la mercancía', data: G.costoMercancia, negrita: true }
             ]) + htmlProd);
         } else {
-            ANIOS.forEach(a => {
-                let precio = a === 0 ? precioBase : G.precioUnitario[a - 1] * (1 + incPrecio / 100);
-                if (a > 0 && redondearPrecio) precio = redondearArriba(precio);
-                G.precioUnitario[a] = precio;
-                G.unidadesVenta[a] = num(`unidades-${a + 1}`);
-                G.ventasProyeccion[a] = G.unidadesVenta[a] * precio;
-            });
             setHTML('ventas-proyeccion', tablaAnual([
-                { label: 'Unidades', data: G.unidadesVenta, fmt: v => fmtNum(v) },
-                { label: 'Precio', data: G.precioUnitario },
+                { label: 'Unidades', data: G.unidadesPropias, fmt: v => fmtNum(v) },
+                { label: 'Precio', data: G.precioPropio },
                 { label: 'Ventas', data: G.ventasProyeccion, negrita: true }
             ]));
         }
@@ -559,16 +683,17 @@ function recalcularTodo() {
         ANIOS.forEach(a => {
             if (diasInventario > 0) {
                 // Igual que el Excel: ventas / días laborables × días de inventario
-                const invAuto = redondearArriba(G.unidadesVenta[a] / diasLaborables * diasInventario);
+                const invAuto = redondearArriba(G.unidadesPropias[a] / diasLaborables * diasInventario);
                 const input = document.getElementById(`inv-final-${a + 1}`);
                 if (input) input.value = invAuto;
             }
             G.invFinalPTUnid[a] = num(`inv-final-${a + 1}`);
             G.invInicialPTUnid[a] = a === 0 ? invInicialPTUnid : G.invFinalPTUnid[a - 1];
-            G.unidadesProduccion[a] = Math.max(0, G.unidadesVenta[a] + G.invFinalPTUnid[a] - G.invInicialPTUnid[a]);
+            // Solo se produce lo propio; la mercancía de reventa no pasa por producción
+            G.unidadesProduccion[a] = Math.max(0, G.unidadesPropias[a] + G.invFinalPTUnid[a] - G.invInicialPTUnid[a]);
         });
         setHTML('produccion-proyeccion', tablaAnual([
-            { label: 'Ventas (u)', data: G.unidadesVenta, fmt: v => fmtNum(v) },
+            { label: 'Ventas del producto propio (u)', data: G.unidadesPropias, fmt: v => fmtNum(v) },
             { label: '(+) Inv. final deseado', data: G.invFinalPTUnid, fmt: v => fmtNum(v) },
             { label: '(−) Inv. inicial', data: G.invInicialPTUnid, fmt: v => fmtNum(v) },
             { label: '(=) Producción requerida', data: G.unidadesProduccion, fmt: v => fmtNum(v), negrita: true }
@@ -1073,6 +1198,8 @@ function recalcularTodo() {
         _recalculando = false;
     }
     if (typeof verificarCompletitudSecciones === 'function') verificarCompletitudSecciones();
+    // Las filas nuevas (productos, gastos, etc.) también respetan el bloqueo sin tipo
+    if (document.body.dataset.tipoEmpresa === '') bloquearCamposSinTipo(true);
 }
 
 // Mantiene los inputs de costo de MP alineados con la receta sin perder lo que ya se escribió
@@ -1357,7 +1484,7 @@ const CAMPOS_EXTRA = [
     'tiempo-unidad-tipo', 'horas-jornada', 'incremento-salarial', 'pct-carga-social',
     'tasa-isr', 'tasa-ptu', 'pct-financiamiento', 'tasa-interes', 'plazo-credito',
     'tasa-ke', 'inv-inicial-pt', 'inv-capital-trabajo', 'metodo-vpn',
-    'criterio-inv-mp', 'tipo-credito', 'inversion-vpn'
+    'criterio-inv-mp', 'tipo-credito', 'inversion-vpn', 'tipo-empresa'
 ];
 
 function recolectarParametrosExtra() {
@@ -1408,6 +1535,9 @@ function aplicarParametrosExtra(extra) {
         (extra.productos || []).forEach(p => agregarProducto(p));
         if (!cont.children.length) agregarProducto();
     }
+    // Proyectos guardados antes del selector: si tienen productos son comercializadora
+    const tipoGuardado = extra['tipo-empresa'] || ((extra.productos || []).length ? 'comercializadora' : 'fabricante');
+    seleccionarTipoEmpresa(tipoGuardado, false);
 }
 
 // ===========================
@@ -1441,6 +1571,7 @@ function nuevoProyecto() {
     Object.entries(porDefecto).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
     const chkPerdidas = document.getElementById('amortizar-perdidas');
     if (chkPerdidas) chkPerdidas.checked = true;
+    seleccionarTipoEmpresa('', false);
     _firmaMP = null;
     const chkPrecio = document.getElementById('redondear-precio');
     if (chkPrecio) chkPrecio.checked = false;
@@ -1896,6 +2027,8 @@ document.addEventListener('DOMContentLoaded', function () {
     let menuGuardado = '0';
     try { menuGuardado = localStorage.getItem('nuko-menu-abierto') || '0'; } catch (e) { /* sin almacenamiento */ }
     alternarMenu(menuGuardado === '1' && window.innerWidth >= 768);
+    marcarSeccionesPorTipo();
+    seleccionarTipoEmpresa(document.getElementById('tipo-empresa')?.value || '', false);
     medirEncabezado();
     verificarSesion(); // Muestra login o carga los proyectos del usuario, según corresponda
 
