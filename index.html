@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
@@ -397,7 +397,7 @@
                                 <input type="number" id="incremento-precio" class="w-full"
                                     placeholder="Ej: 4 (inflación)" step="0.1" onchange="calcularPptoVtas()">
                                 <p class="text-xs text-gray-500 mt-2">El precio se ajustará automáticamente cada año</p>
-                                <label class="flex items-center gap-2 mt-2 text-sm text-gray-700"><input type="checkbox" id="redondear-precio" onchange="recalcularTodo()"> Redondear el precio hacia arriba cada año (como el Excel: 30 → 32 → 34…)</label>
+                                <label class="flex items-center gap-2 mt-2 text-sm text-gray-700"><input type="checkbox" id="redondear-precio" onchange="recalcularTodo()"> Redondear el precio al peso siguiente cada año (ej. 31.56 → 32)</label>
                             </div>
                             <div class="bg-orange-50 p-4 rounded">
                                 <h4 class="font-semibold text-gray-700 mb-1">🧀 Varios productos (compra-venta, opcional)</h4>
@@ -552,12 +552,12 @@
                                     </div>
                                 </div>
                                 <div class="mt-4">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Criterio del inventario final de MP</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Cálculo del inventario final de MP</label>
                                     <select id="criterio-inv-mp" class="w-full mb-1" onchange="recalcularTodo()">
-                                        <option value="excel">Igual al inventario de producto terminado (no se suma a compras)</option>
-                                        <option value="pct">% del consumo (se suma a compras)</option>
+                                        <option value="excel">Según los días de inventario (no se compra aparte)</option>
+                                        <option value="pct">Como % del consumo (se compra adicional)</option>
                                     </select>
-                                    <p class="text-xs text-gray-500 mb-4">El primero es el criterio del Excel (usa los días de inventario de la pestaña 4); con él no se usa el % de arriba.</p>
+                                    <p class="text-xs text-gray-500 mb-4">Según los días de inventario: la MP en almacén es la que lleva el inventario de producto terminado (pestaña 4) y no se compra aparte; el % de arriba no se usa. Como % del consumo: se compra ese % extra para dejarlo en almacén.</p>
                                     <label class="block text-sm font-medium text-gray-700 mb-2">📈 Incremento anual del costo de MP (%)</label>
                                     <input type="number" id="inflacion-mp" class="w-full" placeholder="Ej: 5.198 (inflación promedio)" step="any" data-opcional onchange="recalcularTodo()">
                                     <p class="text-xs text-gray-500 mt-1">El costo de cada MP sube este % cada año.</p>
@@ -870,7 +870,7 @@
             <div id="estado-resultados-tab" class="tab-content">
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h2 class="text-2xl font-bold text-gray-800 mb-6">14. 📊 Estado de Resultados Integral (ERI)</h2>
-                    <label class="flex items-center gap-2 mb-3 text-sm text-gray-700"><input type="checkbox" id="amortizar-perdidas" checked onchange="recalcularTodo()"> Restar las pérdidas de años anteriores a la utilidad para calcular el ISR (la PTU solo se paga en años con utilidad)</label>
+                    <label class="flex items-center gap-2 mb-3 text-sm text-gray-700"><input type="checkbox" id="amortizar-perdidas" checked onchange="recalcularTodo()"> Amortizar pérdidas fiscales: las pérdidas de años anteriores se restan de la utilidad antes de calcular el ISR (la PTU se calcula solo en años con utilidad)</label>
                     <div class="grid grid-cols-2 gap-4 mb-4">
                         <div><label class="block text-sm font-medium text-gray-700 mb-2">ISR (%)</label><input type="number" id="tasa-isr" class="w-full" placeholder="30" step="any" data-opcional onchange="recalcularTodo()"></div>
                         <div><label class="block text-sm font-medium text-gray-700 mb-2">PTU (%)</label><input type="number" id="tasa-ptu" class="w-full" placeholder="10" step="any" data-opcional onchange="recalcularTodo()"></div>
@@ -923,7 +923,7 @@
                             <div><label class="block text-sm font-medium text-gray-700 mb-2">% financiado con crédito bancario</label><input type="number" id="pct-financiamiento" class="w-full" placeholder="Ej: 40" step="any" data-opcional onchange="recalcularTodo()"></div>
                             <div><label class="block text-sm font-medium text-gray-700 mb-2">Tasa de interés anual del crédito (%)</label><input type="number" id="tasa-interes" class="w-full" placeholder="Ej: 19" step="any" data-opcional onchange="recalcularTodo()"></div>
                             <div><label class="block text-sm font-medium text-gray-700 mb-2">Inventario inicial de capital de trabajo ($)</label><input type="number" id="inv-capital-trabajo" class="w-full" placeholder="0" step="any" data-opcional onchange="recalcularTodo()">
-                                <p class="text-xs text-gray-500 mt-1">Se compra con la inversión y se queda en el balance (ej. Lácteos: 60,000).</p></div>
+                                <p class="text-xs text-gray-500 mt-1">Mercancía o materia prima que se compra antes de empezar a operar; se paga con la inversión y se queda en el balance.</p></div>
                             <div><label class="block text-sm font-medium text-gray-700 mb-2">Tipo de crédito</label>
                                 <select id="tipo-credito" class="w-full" onchange="recalcularTodo()">
                                     <option value="fija">Mensualidad fija (pagos iguales)</option>
@@ -984,7 +984,7 @@
                     <h2 class="text-2xl font-bold text-gray-800 mb-6">17. Evaluación del Proyecto y Razones Financieras</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div><label class="block text-sm font-medium text-gray-700 mb-2">Costo de capital de los socios, ke (%)</label><input type="number" id="tasa-ke" class="w-full" placeholder="Ej: 15" step="any" data-opcional onchange="recalcularTodo()">
-                            <p class="text-xs text-gray-500 mt-1">Lo define cada usuario (rendimiento que esperan los socios). kd = tasa del crédito (pestaña 15) y t = ISR + PTU si hay utilidad, o solo ISR si no hay (pestaña 14).</p>
+                            <p class="text-xs text-gray-500 mt-1">Rendimiento mínimo que esperan los socios por su inversión; lo define cada proyecto. kd = tasa del crédito (pestaña 15) y t = ISR + PTU si hay utilidad, o solo ISR si no hay (pestaña 14).</p>
                         </div>
                         <div><label class="block text-sm font-medium text-gray-700 mb-2">Flujos para VPN, TIR, B/C y PRI</label>
                             <select id="metodo-vpn" class="w-full" onchange="recalcularTodo()">
@@ -992,14 +992,14 @@
                                 <option value="flujo-neto">Flujo neto del flujo de efectivo (después del crédito)</option>
                                 <option value="proyecto">Flujo del proyecto (antes de pagar el crédito)</option>
                             </select>
-                            <p class="text-xs text-gray-500 mt-1">Criterio de la maestra: saldos acumulados. El Excel de Lácteos usa "flujo neto".</p>
+                            <p class="text-xs text-gray-500 mt-1"><strong>Saldos acumulados:</strong> el efectivo que tiene la empresa al cierre de cada año. <strong>Flujo neto:</strong> lo que entra menos lo que sale en el año, ya pagado el crédito. <strong>Flujo del proyecto:</strong> el flujo del año antes de pagar intereses y capital del crédito.</p>
                         </div>
-                        <div><label class="block text-sm font-medium text-gray-700 mb-2">Inversión que se resta en el año 0</label>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-2">Inversión inicial (año 0)</label>
                             <select id="inversion-vpn" class="w-full" onchange="recalcularTodo()">
                                 <option value="activos">Lo invertido en activos (activo fijo, diferido e inventario inicial)</option>
                                 <option value="total">Inversión total (incluye el efectivo inicial)</option>
                             </select>
-                            <p class="text-xs text-gray-500 mt-1">Criterio de la maestra: lo invertido en activos. El Excel de Lácteos usa la inversión total.</p>
+                            <p class="text-xs text-gray-500 mt-1">Es la cantidad que se resta en el año 0 al calcular el VPN, la TIR, el B/C y el periodo de recuperación.</p>
                         </div>
                     </div>
                     <div class="result-box p-4 rounded-lg mb-6">
