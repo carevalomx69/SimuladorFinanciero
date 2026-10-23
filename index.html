@@ -1,14 +1,15 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análisis Financiero de Proyectos</title>
+    <title>NÜKO · Proyectos que generan valor</title>
+    <link rel="icon" type="image/png" href="style/img/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
         rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -19,37 +20,59 @@
             theme: {
                 extend: {
                     colors: {
+                        // Paleta verde estilo Excel (#217346 es el verde de Excel).
+                        // Se redefinen indigo, blue, purple, orange y yellow para que
+                        // todos los botones y recuadros existentes queden en verde
+                        // sin tocar cada clase del HTML. Rojo se deja para alertas.
                         indigo: {
-                            50: '#EEF1F6', 100: '#DCE2EC', 200: '#B9C5D9',
-                            300: '#96A9C6', 400: '#5A729D', 500: '#2E4370',
-                            600: '#1B2A4A', 700: '#152140', 800: '#101832',
-                            900: '#0B1224', 950: '#070C18',
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#5FA463', 500: '#2E8B57',
+                            600: '#217346', 700: '#1A5E38', 800: '#185C37',
+                            900: '#0E3D24', 950: '#08261A',
                         },
                         blue: {
-                            50: '#EEF1F6', 100: '#DCE2EC', 200: '#B9C5D9',
-                            300: '#96A9C6', 400: '#5A729D', 500: '#2E4370',
-                            600: '#1B2A4A', 700: '#152140', 800: '#101832',
-                            900: '#0B1224', 950: '#070C18',
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#5FA463', 500: '#2E8B57',
+                            600: '#217346', 700: '#1A5E38', 800: '#185C37',
+                            900: '#0E3D24', 950: '#08261A',
+                        },
+                        purple: {
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#5FA463', 500: '#2E8B57',
+                            600: '#217346', 700: '#1A5E38', 800: '#185C37',
+                            900: '#0E3D24', 950: '#08261A',
+                        },
+                        orange: {
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#5FA463', 500: '#2E8B57',
+                            600: '#217346', 700: '#1A5E38', 800: '#185C37',
+                            900: '#0E3D24', 950: '#08261A',
+                        },
+                        yellow: {
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#5FA463', 500: '#2E8B57',
+                            600: '#217346', 700: '#1A5E38', 800: '#185C37',
+                            900: '#0E3D24', 950: '#08261A',
                         },
                         brass: {
-                            50: '#FAF5EA', 100: '#F2E6C9', 200: '#E4CD97',
-                            300: '#D5B36A', 400: '#C29F4E', 500: '#B08D57',
-                            600: '#8F7040', 700: '#6E5630', 800: '#4D3C21',
-                            900: '#2E2311',
+                            50: '#EEF6EA', 100: '#E2EFDA', 200: '#C6E0B4',
+                            300: '#A9D08E', 400: '#70AD47', 500: '#217346',
+                            600: '#185C37', 700: '#144D2E', 800: '#0E3D24',
+                            900: '#08261A',
                         },
                         paper: {
-                            DEFAULT: '#FAF8F3', 50: '#FFFFFF', 100: '#FAF8F3',
-                            200: '#F1EDE2', 300: '#E6E0D0',
+                            DEFAULT: '#F3F2F1', 50: '#FFFFFF', 100: '#F7FBF5',
+                            200: '#E2EFDA', 300: '#D4D4D4',
                         },
                         ink: {
-                            DEFAULT: '#1C1B18', 50: '#F4F3F1', 100: '#E3E1DC',
-                            400: '#6B685F', 500: '#48453C', 600: '#332F26',
-                            700: '#26241E', 800: '#1C1B18', 900: '#131210',
+                            DEFAULT: '#1F2A22', 50: '#F3F2F1', 100: '#E1E1E1',
+                            400: '#5F6B62', 500: '#3E4A41', 600: '#2C362F',
+                            700: '#1F2A22', 800: '#185C37', 900: '#0E3D24',
                         },
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                        serif: ['Fraunces', 'serif'],
+                        serif: ['Poppins', 'sans-serif'], // títulos con la tipografía geométrica del logo NÜKO
                         mono: ['"JetBrains Mono"', 'monospace'],
                     },
                 }
@@ -67,9 +90,9 @@
     <!-- Cubre toda la pantalla hasta que se confirme una sesión activa. -->
     <!-- ============================================================== -->
     <div id="auth-screen"
-        class="fixed inset-0 bg-gradient-to-br from-indigo-700 to-indigo-900 z-[200] flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-8">
-            <h1 class="text-2xl font-bold text-indigo-700 text-center mb-1">📈 Análisis Financiero</h1>
+        class="auth-fondo fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <img src="style/img/nuko-logo.png" alt="NÜKO · Proyectos que generan valor" class="h-20 mx-auto mb-4">
             <p class="text-center text-gray-500 text-sm mb-6">Inicia sesión para ver tus proyectos</p>
 
             <!-- FORMULARIO DE LOGIN -->
@@ -126,7 +149,8 @@
     <div id="modal-moneda" class="fixed inset-0 bg-gray-900 bg-opacity-90 z-[100] flex items-center justify-center"
         style="display: flex;">
         <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center">
-            <h2 class="text-3xl font-bold text-indigo-700 mb-4">🌍 Bienvenido</h2>
+            <img src="style/img/nuko-isotipo.png" alt="" class="h-14 mx-auto mb-3">
+            <h2 class="text-3xl font-bold text-indigo-700 mb-4">Bienvenido</h2>
             <p class="text-gray-600 mb-6">Selecciona la moneda de tu proyecto:</p>
 
             <div class="grid grid-cols-1 gap-3">
@@ -145,39 +169,31 @@
             </div>
         </div>
     </div>
-    <header class="bg-paper-50 shadow-lg border-b-4 border-brass-500">
-        <div class="max-w-7xl mx-auto px-4 py-6">
-            <h1 class="text-3xl font-serif font-semibold text-ink-800 text-center tracking-tight">
-                Análisis Financiero de Proyectos
-            </h1>
-            <p class="text-center text-ink-400 mt-2">Guía paso a paso para la proyección y valuación de tu negocio</p>
-        </div>
-
-        <div class="bg-indigo-600 text-white p-2 text-center text-sm flex justify-center items-center space-x-4">
-            <span id="status-socket" class="w-3 h-3 bg-red-500 rounded-full" title="Desconectado"></span>
-
-            <span class="font-mono text-base">
-                <span id="label-moneda" class="font-bold">1 USD</span> :
-                <strong id="valor-dolar">Cargando...</strong>
-            </span>
-
-            <button onclick="pedirTipoCambio()"
-                class="bg-indigo-500 hover:bg-indigo-400 text-white px-2 py-1 rounded text-xs transition-colors">
-                🔄 Refrescar
+    <header class="encabezado">
+        <div class="encabezado-contenido">
+            <!-- La N abre y cierra el menú de secciones -->
+            <button id="boton-menu" class="boton-n" onclick="alternarMenu()" aria-label="Mostrar u ocultar secciones"
+                aria-expanded="false" aria-controls="menu-secciones" title="Secciones">
+                <img src="style/img/nuko-isotipo.png" alt="">
             </button>
+            <img src="style/img/nuko-logo.png" alt="NÜKO · Proyectos que generan valor" class="logo-encabezado">
 
-            <button onclick="mostrarModal()"
-                class="bg-white text-indigo-600 px-3 py-1 rounded text-xs font-bold hover:bg-gray-100 transition-colors border border-transparent hover:border-white">
-                💱 Cambiar Moneda
-            </button>
-
-            <span class="text-indigo-200 text-xs">|</span>
-
-            <span id="usuario-nombre" class="text-xs font-medium"></span>
-            <button onclick="cerrarSesion()"
-                class="bg-indigo-800 hover:bg-indigo-900 text-white px-3 py-1 rounded text-xs transition-colors">
-                Cerrar sesión
-            </button>
+            <div class="encabezado-acciones">
+                <div class="chip-moneda" title="Tipo de cambio en tiempo real">
+                    <span id="status-socket" class="w-3 h-3 bg-red-500 rounded-full" title="Desconectado"></span>
+                    <span class="font-mono">
+                        <span id="label-moneda" class="font-bold">1 USD</span> :
+                        <strong id="valor-dolar">Cargando...</strong>
+                    </span>
+                    <button onclick="pedirTipoCambio()" class="boton-icono" title="Refrescar tipo de cambio" aria-label="Refrescar tipo de cambio">⟳</button>
+                </div>
+                <button onclick="mostrarModal()" class="boton-contorno">Moneda</button>
+                <div class="chip-usuario">
+                    <span id="usuario-inicial" class="avatar-usuario">?</span>
+                    <span id="usuario-nombre"></span>
+                </div>
+                <button onclick="cerrarSesion()" class="boton-salir">Cerrar sesión</button>
+            </div>
         </div>
     </header>
 
@@ -187,8 +203,10 @@
         <!-- carpeta de archivero; en móvil colapsa a una tira horizontal.    -->
         <!-- El proceso es secuencial de verdad (cada sección usa datos de   -->
         <!-- la anterior), por eso la numeración aquí SÍ tiene sentido.       -->
-        <nav class="index-nav bg-ink-800 md:sticky md:top-0 md:w-64 md:self-start shrink-0 z-40">
-            <div class="flex flex-row md:flex-col overflow-x-auto md:overflow-visible">
+        <div id="fondo-menu" class="fondo-menu" onclick="alternarMenu(false)"></div>
+        <nav id="menu-secciones" class="index-nav shrink-0 z-40" aria-label="Secciones del proyecto">
+            <div class="menu-titulo">Secciones</div>
+            <div class="flex flex-col">
                 <button data-tab="plan" class="nav-button active" onclick="showTab('plan')"><span
                         class="nav-number">01</span><span class="nav-label">Mercado Meta</span></button>
                 <button data-tab="fact-sensibil" class="nav-button" onclick="showTab('fact-sensibil')"><span
@@ -228,7 +246,7 @@
             </div>
         </nav>
 
-        <main class="max-w-5xl mx-auto md:mx-0 px-4 py-8 flex-1 min-w-0">
+        <main class="max-w-5xl mx-auto px-4 py-8 flex-1 min-w-0">
 
             <input type="hidden" id="id_proyecto_actual">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">

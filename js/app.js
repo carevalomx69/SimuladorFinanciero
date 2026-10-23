@@ -78,7 +78,11 @@ function ocultarPantallaAuth() {
     document.getElementById('auth-screen').style.display = 'none';
     const nombreEl = document.getElementById('usuario-nombre');
     if (nombreEl && usuarioActual) {
-        nombreEl.textContent = `👤 ${usuarioActual.nombre}`;
+        nombreEl.textContent = usuarioActual.nombre;
+    }
+    const inicialEl = document.getElementById('usuario-inicial');
+    if (inicialEl && usuarioActual && usuarioActual.nombre) {
+        inicialEl.textContent = usuarioActual.nombre.trim().charAt(0).toUpperCase();
     }
 }
 
@@ -300,9 +304,29 @@ function showTab(tabId) {
     document.querySelectorAll('.nav-button').forEach(btn => {
         btn.classList.remove('active');
     });
-    if (event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-    }
+    const boton = document.querySelector(`.nav-button[data-tab="${tabId}"]`);
+    if (boton) boton.classList.add('active');
+    // En pantallas chicas el menú se cierra al elegir una sección
+    if (window.innerWidth < 768) alternarMenu(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Ajusta la altura real del encabezado (en celular se acomoda en dos renglones)
+function medirEncabezado() {
+    const enc = document.querySelector('.encabezado');
+    if (enc) document.documentElement.style.setProperty('--alto-encabezado', enc.offsetHeight + 'px');
+}
+window.addEventListener('resize', medirEncabezado);
+
+// Abre o cierra el menú de secciones con la N del encabezado.
+// Se recuerda la última posición en este navegador.
+function alternarMenu(abrir) {
+    const abierto = document.body.classList.contains('menu-abierto');
+    const nuevo = typeof abrir === 'boolean' ? abrir : !abierto;
+    document.body.classList.toggle('menu-abierto', nuevo);
+    const boton = document.getElementById('boton-menu');
+    if (boton) boton.setAttribute('aria-expanded', String(nuevo));
+    try { localStorage.setItem('nuko-menu-abierto', nuevo ? '1' : '0'); } catch (e) { /* sin almacenamiento */ }
 }
 
 function mostrarModal() {
@@ -1092,6 +1116,7 @@ function vpn(tasa, flujos) {
 
 // TIR por bisección (busca la tasa donde el VPN = 0)
 function tir(flujos) {
+    if (!flujos.some(f => f < 0) || !flujos.some(f => f > 0)) return NaN; // sin cambio de signo no hay TIR
     let bajo = -0.99, alto = 1;
     while (vpn(alto, flujos) > 0 && alto < 1e6) alto *= 2;
     if (vpn(bajo, flujos) * vpn(alto, flujos) > 0) return NaN;
@@ -1867,6 +1892,11 @@ window.addEventListener('resize', checkMobile);
 
 document.addEventListener('DOMContentLoaded', function () {
     checkMobile();
+    // El menú inicia cerrado; se abre con la N (o como lo dejó el usuario la última vez)
+    let menuGuardado = '0';
+    try { menuGuardado = localStorage.getItem('nuko-menu-abierto') || '0'; } catch (e) { /* sin almacenamiento */ }
+    alternarMenu(menuGuardado === '1' && window.innerWidth >= 768);
+    medirEncabezado();
     verificarSesion(); // Muestra login o carga los proyectos del usuario, según corresponda
 
     // Agrega listeners a los inputs de Mercado Meta para que calculen al cargar la página si tienen valores
@@ -1909,7 +1939,7 @@ function iniciarSocket() {
     conn.onopen = function (e) {
         console.log("✅ Conexión establecida con el Socket!");
         const status = document.getElementById('status-socket');
-        if (status) status.className = "w-3 h-3 bg-green-500 rounded-full";
+        if (status) { status.className = "w-3 h-3 bg-green-500 rounded-full"; status.title = "Conectado"; }
         pedirTipoCambio();
     };
 
@@ -1944,7 +1974,7 @@ function iniciarSocket() {
     conn.onclose = function (e) {
         console.log("❌ Socket desconectado");
         const status = document.getElementById('status-socket');
-        if (status) status.className = "w-3 h-3 bg-red-500 rounded-full";
+        if (status) { status.className = "w-3 h-3 bg-red-500 rounded-full"; status.title = "Desconectado"; }
     };
 }
 
@@ -2030,16 +2060,12 @@ function imprimirReporte() {
 }
 
 function checkMobile() {
-    if (window.innerWidth < 768) {
-        document.querySelectorAll('.nav-button').forEach(btn => {
-            btn.classList.add('text-xs', 'px-2', 'py-1');
-            btn.classList.remove('px-3', 'py-2');
-        });
+    // El menú de secciones ahora es un panel que se abre con la N; en pantallas chicas
+    // se cierra solo si el usuario agranda/achica la ventana con el menú abierto.
+    if (window.innerWidth < 768 && document.body.classList.contains('menu-abierto')) {
+        document.body.classList.add('menu-movil');
     } else {
-        document.querySelectorAll('.nav-button').forEach(btn => {
-            btn.classList.remove('text-xs', 'px-2', 'py-1');
-            btn.classList.add('px-3', 'py-2');
-        });
+        document.body.classList.remove('menu-movil');
     }
 }
 
@@ -2087,7 +2113,7 @@ function mostrarGraficos() {
                 {
                     label: 'Ingresos',
                     data: globalData.ventasProyeccion,
-                    backgroundColor: 'rgba(34, 197, 94, 0.6)', // Verde
+                    backgroundColor: 'rgba(33, 115, 70, 0.7)', // Verde Excel
                     borderColor: 'rgba(34, 197, 94, 1)',
                     borderWidth: 1
                 },
@@ -2121,8 +2147,8 @@ function mostrarGraficos() {
                 label: 'Dinero en Caja (Acumulado)',
                 // Agregamos el punto inicial negativo
                 data: [-(globalData.inversionTotal || 0), ...datosFlujo],
-                borderColor: '#6366f1', // Indigo
-                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                borderColor: '#217346', // Verde Excel
+                backgroundColor: 'rgba(33, 115, 70, 0.2)',
                 fill: true,
                 tension: 0.4
             }]
@@ -2159,10 +2185,10 @@ function mostrarGraficos() {
             datasets: [{
                 data: [mp, mo, ind, op],
                 backgroundColor: [
-                    '#3b82f6', // Azul
-                    '#f59e0b', // Amarillo
-                    '#10b981', // Verde
-                    '#8b5cf6'  // Morado
+                    '#217346', // Verde Excel
+                    '#70AD47', // Verde claro
+                    '#A9D08E', // Verde pastel
+                    '#375623'  // Verde oscuro
                 ]
             }]
         },
