@@ -49,6 +49,12 @@ Sigue estos pasos para levantar el entorno completo:
     ```
     *Deberías ver `apache_calculadora` y `oracle_db` en estado "Up".*
 
+## 🧭 Notas de despliegue (leer antes de tocar rutas o servidor)
+
+El simulador vive bajo `/simulador/` detrás de Nginx. Las llamadas a la API en `js/app.js` deben ser
+relativas (`api/login.php`, sin `/` inicial) y el WebSocket usa `/simulador-ws/`. Si se rompe esto,
+el login falla con "Error de conexión" y la consola muestra 404. Detalle completo en [`CLAUDE.md`](CLAUDE.md).
+
 ## 🌐 Acceso al Sistema
 
 Una vez que los contenedores estén arriba:
